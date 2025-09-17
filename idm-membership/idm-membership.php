@@ -63,6 +63,21 @@ add_action('plugins_loaded', function () {
     } else {
         error_log('[IDM] campaigns file NOT readable: ' . $admin);
     }
+
+    $dashboard = IDM_MEMBERSHIP_DIR . 'admin/class-admin.php';
+    if (is_readable($dashboard)) {
+        require_once $dashboard;
+        error_log('[IDM] admin dashboard file loaded');
+
+        if (class_exists('\\IDM\\Membership\\Admin')) {
+            \IDM\Membership\Admin::init();
+            error_log('[IDM] Admin::init() executed');
+        } else {
+            error_log('[IDM] Admin class not found in admin dashboard file');
+        }
+    } else {
+        error_log('[IDM] admin dashboard file NOT readable: ' . $dashboard);
+    }
 }, 6);
 
 /**
