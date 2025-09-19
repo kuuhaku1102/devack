@@ -364,7 +364,9 @@
           }
 
           var winner = json.data.winner;
-          animateRoulette(winner);
+          var persistence = json.data.persistence || null;
+          handleWinnerPersistence(winner, persistence);
+          animateRoulette(winner, persistence);
         })
         .catch(function() {
           showError('通信中にエラーが発生しました。');
@@ -382,10 +384,59 @@
     }
   }
 
-  function animateRoulette(winner) {
+  function handleWinnerPersistence(winner, persistence) {
+    if (!winner || !persistence) {
+      return;
+    }
+
+    if (persistence.storage === 'local') {
+      saveWinnerLocally(winner, persistence);
+    }
+  }
+
+  function saveWinnerLocally(winner, persistence) {
+    if (typeof window.localStorage === 'undefined') {
+      return;
+    }
+
+    try {
+      var key = 'idmMembershipDrawHistory';
+      var raw = window.localStorage.getItem(key);
+      var history = raw ? JSON.parse(raw) : {};
+      if (!history || typeof history !== 'object') {
+        history = {};
+      }
+
+      var campaign = (window.idmDashboard && idmDashboard.campaign) ? idmDashboard.campaign : 'default';
+      if (!Array.isArray(history[campaign])) {
+        history[campaign] = [];
+      }
+
+      var entry = {
+        memberId: winner.member_id || null,
+        entryId: winner.entry_id || null,
+        name: winner.name || '',
+        weight: winner.weight || null,
+        drawnAt: winner.drawn_at || null,
+        token: persistence && persistence.token ? persistence.token : null,
+        storedAt: new Date().toISOString()
+      };
+
+      history[campaign].unshift(entry);
+      if (history[campaign].length > (window.idmDashboard && idmDashboard.tempLimit ? idmDashboard.tempLimit : 20)) {
+        history[campaign] = history[campaign].slice(0, window.idmDashboard && idmDashboard.tempLimit ? idmDashboard.tempLimit : 20);
+      }
+
+      window.localStorage.setItem(key, JSON.stringify(history));
+    } catch (e) {
+      // Silently ignore storage issues.
+    }
+  }
+
+  function animateRoulette(winner, persistence) {
     var rows = $all('.idm-entrant-list .idm-entrant');
     if (!rows.length) {
-      displayWinner(winner);
+      displayWinner(winner, persistence);
       if (drawButton) {
         drawButton.disabled = false;
       }
@@ -420,7 +471,7 @@
     }
 
     if (!sequence.length) {
-      displayWinner(winner);
+      displayWinner(winner, persistence);
       if (drawButton) {
         drawButton.disabled = false;
       }
@@ -444,13 +495,20 @@
         row.classList.add('is-active');
         if (isFinal) {
           row.classList.add('is-final');
-          displayWinner(winner);
+          displayWinner(winner, persistence);
         }
         previous = row;
       }, totalDelay);
     });
 
     setTimeout(function() {
+      if (drawButton) {
+        drawButton.disabled = false;
+      }
+    }, totalDelay + 50);
+  }
+
+  function displayWinner(winner, persistence) {
       if (drawButton) {
         drawButton.disabled = false;
       }
@@ -464,6 +522,11 @@
     var name = winner.name ? winner.name : '(未設定)';
     var chance = winner.weight ? winner.weight : 100;
     var html = '<span class="winner">' + escapeHtml(name) + '</span> - ' + chance + '%';
+
+    if (persistence && persistence.message) {
+      var level = persistence.level ? ' is-' + persistence.level : '';
+      html += '<div class="idm-draw-note' + level + '">' + escapeHtml(persistence.message) + '</div>';
+    }
     resultBox.innerHTML = html;
   }
 

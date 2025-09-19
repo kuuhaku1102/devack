@@ -9,6 +9,16 @@ class Admin {
      */
     const DEFAULT_WEIGHT = 100;
 
+    /**
+     * Option key used when we can only store draw results temporarily.
+     */
+    const TEMP_WINNERS_OPTION = 'idm_membership_draw_snapshots';
+
+    /**
+     * Number of snapshots to retain per campaign when falling back to options/local storage.
+     */
+    const TEMP_WINNERS_LIMIT = 20;
+
     /** @var array[] */
     private static $messages = [];
 
@@ -64,6 +74,7 @@ class Admin {
                 'nonce'    => wp_create_nonce('idm_draw_campaign'),
                 'campaign' => $selected_campaign,
                 'defaultWeight' => self::DEFAULT_WEIGHT,
+                'tempLimit' => self::TEMP_WINNERS_LIMIT,
                 'i18n'     => [
                     'noEntries'     => __('応募者がいません。', 'idm-membership'),
                     'drawing'       => __('抽選中...', 'idm-membership'),
@@ -494,6 +505,38 @@ class Admin {
             wp_send_json_error(['message' => __('抽選に失敗しました。', 'idm-membership')]);
         }
 
+        $record = self::record_winner($campaign, $winner);
+        $snapshot = isset($record['snapshot']) && is_array($record['snapshot']) ? $record['snapshot'] : [];
+        $drawn_at = isset($snapshot['drawn_at']) ? (string) $snapshot['drawn_at'] : current_time('mysql');
+        $token    = isset($snapshot['token']) ? (string) $snapshot['token'] : '';
+
+        $response = [
+            'winner' => [
+                'member_id' => isset($winner['member_id']) ? (int) $winner['member_id'] : 0,
+                'entry_id'  => isset($winner['id']) ? (int) $winner['id'] : 0,
+                'name'      => isset($winner['name']) ? $winner['name'] : '',
+                'weight'    => isset($winner['weight']) ? (int) $winner['weight'] : self::DEFAULT_WEIGHT,
+                'drawn_at'  => $drawn_at,
+                'record_id' => ($record['storage'] ?? '') === 'db'
+                    ? (int) ($record['id'] ?? 0)
+                    : (string) ($record['id'] ?? ''),
+            ],
+            'persistence' => [
+                'storage' => isset($record['storage']) ? $record['storage'] : 'local',
+                'id'      => isset($record['id']) ? $record['id'] : $token,
+                'token'   => $token,
+            ],
+        ];
+
+        if (!empty($record['message'])) {
+            $response['persistence']['message'] = $record['message'];
+        }
+
+        if (!empty($record['level'])) {
+            $response['persistence']['level'] = $record['level'];
+        }
+
+        wp_send_json_success($response);
         $record_id = self::record_winner($campaign, $winner);
         if ($record_id === false) {
             wp_send_json_error(['message' => __('抽選結果を保存できませんでした。', 'idm-membership')]);
@@ -540,6 +583,43 @@ class Admin {
     }
 
     private static function record_winner($campaign, array $winner) {
+        $snapshot = self::build_winner_snapshot($campaign, $winner);
+
+        $db_id = self::record_winner_to_db($snapshot);
+        if ($db_id !== false) {
+            return [
+                'storage'  => 'db',
+                'id'       => $db_id,
+                'token'    => $snapshot['token'],
+                'snapshot' => $snapshot,
+                'message'  => '',
+                'level'    => 'success',
+            ];
+        }
+
+        $option_id = self::record_winner_to_option($snapshot);
+        if ($option_id !== false) {
+            return [
+                'storage'  => 'option',
+                'id'       => $option_id,
+                'token'    => $snapshot['token'],
+                'snapshot' => $snapshot,
+                'message'  => __('抽選結果を一時的に保存しました。データベースの状態をご確認ください。', 'idm-membership'),
+                'level'    => 'warning',
+            ];
+        }
+
+        return [
+            'storage'  => 'local',
+            'id'       => $snapshot['token'],
+            'token'    => $snapshot['token'],
+            'snapshot' => $snapshot,
+            'message'  => __('抽選結果をブラウザに保存しました。他の端末やブラウザでは確認できません。', 'idm-membership'),
+            'level'    => 'warning',
+        ];
+    }
+
+    private static function record_winner_to_db(array $snapshot) {
         global $wpdb;
 
         $table = $wpdb->prefix . 'idm_campaign_winners';
@@ -561,6 +641,13 @@ class Admin {
         }
 
         $data = [
+            'campaign_key'     => $snapshot['campaign_key'],
+            'winner_member_id' => $snapshot['winner_member_id'],
+            'entry_id'         => $snapshot['entry_id'],
+            'winner_name'      => $snapshot['winner_name'],
+            'winner_email'     => $snapshot['winner_email'],
+            'winner_weight'    => $snapshot['winner_weight'],
+            'drawn_at'         => $snapshot['drawn_at'],
             'campaign_key'     => $campaign,
             'winner_member_id' => isset($winner['member_id']) ? (int) $winner['member_id'] : 0,
             'entry_id'         => isset($winner['id']) ? (int) $winner['id'] : 0,
@@ -572,6 +659,17 @@ class Admin {
 
         $formats = ['%s', '%d', '%d', '%s', '%s', '%d', '%s'];
 
+        if (!self::table_has_column($table, 'drawn_at')) {
+            unset($data['drawn_at']);
+            array_pop($formats);
+        }
+
+        $result = $wpdb->insert($table, $data, $formats);
+
+        if ($result === false) {
+            if (!empty($wpdb->last_error)) {
+                error_log('[IDM] Failed to record campaign winner: ' . $wpdb->last_error);
+            }
         $result = $wpdb->insert($table, $data, $formats);
 
         if ($result === false) {
@@ -581,6 +679,58 @@ class Admin {
         return (int) $wpdb->insert_id;
     }
 
+    private static function record_winner_to_option(array $snapshot) {
+        $option_value = get_option(self::TEMP_WINNERS_OPTION, []);
+        if (!is_array($option_value)) {
+            $option_value = [];
+        }
+
+        $campaign = $snapshot['campaign_key'];
+
+        if (!isset($option_value[$campaign]) || !is_array($option_value[$campaign])) {
+            $option_value[$campaign] = [];
+        }
+
+        array_unshift($option_value[$campaign], $snapshot);
+        if (count($option_value[$campaign]) > self::TEMP_WINNERS_LIMIT) {
+            $option_value[$campaign] = array_slice($option_value[$campaign], 0, self::TEMP_WINNERS_LIMIT);
+        }
+
+        $updated = update_option(self::TEMP_WINNERS_OPTION, $option_value, false);
+        if ($updated) {
+            return $snapshot['token'];
+        }
+
+        $current = get_option(self::TEMP_WINNERS_OPTION, []);
+        if ($current === $option_value) {
+            return $snapshot['token'];
+        }
+
+        error_log('[IDM] Failed to cache campaign winner in options.');
+        return false;
+    }
+
+    private static function build_winner_snapshot($campaign, array $winner) {
+        return [
+            'token'            => self::generate_snapshot_token(),
+            'campaign_key'     => (string) $campaign,
+            'winner_member_id' => isset($winner['member_id']) ? (int) $winner['member_id'] : 0,
+            'entry_id'         => isset($winner['id']) ? (int) $winner['id'] : 0,
+            'winner_name'      => isset($winner['name']) ? (string) $winner['name'] : '',
+            'winner_email'     => isset($winner['email']) ? (string) $winner['email'] : '',
+            'winner_weight'    => isset($winner['weight']) ? (int) $winner['weight'] : self::DEFAULT_WEIGHT,
+            'drawn_at'         => current_time('mysql'),
+        ];
+    }
+
+    private static function generate_snapshot_token() {
+        if (function_exists('wp_generate_uuid4')) {
+            return wp_generate_uuid4();
+        }
+
+        return uniqid('idm_', true);
+    }
+
     private static function table_exists($table) {
         global $wpdb;
 
@@ -588,6 +738,19 @@ class Admin {
         $found = $wpdb->get_var($prepared);
 
         return $found === $table;
+    }
+
+    private static function table_has_column($table, $column) {
+        global $wpdb;
+
+        if (!function_exists('esc_sql')) {
+            return false;
+        }
+
+        $table = esc_sql($table);
+        $sql = $wpdb->prepare("SHOW COLUMNS FROM `{$table}` LIKE %s", $column);
+
+        return (bool) $wpdb->get_var($sql);
     }
 }
 
