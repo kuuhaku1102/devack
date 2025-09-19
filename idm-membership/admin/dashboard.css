@@ -53,6 +53,10 @@
   color: #646970;
 }
 
+.idm-dashboard .idm-weights-form {
+  margin-top: 24px;
+}
+
 .idm-dashboard .idm-weights-form table input[type="number"] {
   width: 6em;
 }

@@ -71,6 +71,7 @@ class Admin {
                     'weightInvalid' => __('抽選確率は1以上の数値を入力してください。', 'idm-membership'),
                     'applySuccess'  => __('抽選確率を適用しました。設定を保存してください。', 'idm-membership'),
                     'applyPartial'  => __('抽選確率を適用しましたが、名前が未設定の応募者は対象外です。', 'idm-membership'),
+                    'applyPartial'  => __('抽選確率を適用しましたが、メールアドレスまたは名前が未設定の応募者は対象外です。', 'idm-membership'),
                     'applyFailed'   => __('抽選確率を適用できませんでした。対象となる応募者を選択してください。', 'idm-membership'),
                 ],
             ]
@@ -172,6 +173,7 @@ class Admin {
         echo '<table class="widefat fixed striped">';
         echo '<thead><tr>';
         echo '<th>' . esc_html__('名前', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('メールアドレス', 'idm-membership') . '</th>';
         echo '<th>' . esc_html__('応募日時', 'idm-membership') . '</th>';
         echo '<th>' . esc_html__('抽選確率(%)', 'idm-membership') . '</th>';
         echo '</tr></thead>';
@@ -179,6 +181,9 @@ class Admin {
         foreach ($entries as $entry) {
             $raw_name  = isset($entry['name']) ? (string) $entry['name'] : '';
             $name      = $raw_name !== '' ? $raw_name : __('(未設定)', 'idm-membership');
+            $raw_email = isset($entry['email']) ? (string) $entry['email'] : '';
+            $name      = $raw_name !== '' ? $raw_name : __('(未設定)', 'idm-membership');
+            $email     = $raw_email !== '' ? $raw_email : __('(メール不明)', 'idm-membership');
             $joined_at = isset($entry['joined_at']) ? (string) $entry['joined_at'] : '';
             $weight    = isset($entry['weight']) ? (int) $entry['weight'] : self::DEFAULT_WEIGHT;
 
@@ -194,6 +199,20 @@ class Admin {
                 esc_html($joined_at),
                 (int) $weight,
                 esc_attr($raw_name)
+                '<tr class="idm-entrant" data-member-id="%1$d" data-weight="%5$d" data-name="%6$s" data-email="%7$s">'
+                . '<td class="idm-entrant-name"><label><input type="checkbox" class="idm-entrant-select" value="%1$d" /> '
+                . '<span class="idm-entrant-name-text">%2$s</span></label></td>'
+                . '<td class="idm-entrant-email">%3$s</td>'
+                . '<td>%4$s</td>'
+                . '<td class="idm-entrant-weight">%5$d</td>'
+                . '</tr>',
+                (int) $entry['member_id'],
+                esc_html($name),
+                esc_html($email),
+                esc_html($joined_at),
+                (int) $weight,
+                esc_attr($raw_name),
+                esc_attr($raw_email)
             );
         }
         echo '</tbody>';

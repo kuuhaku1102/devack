@@ -45,6 +45,28 @@
     }
 
     var textInput = clone.querySelector('.idm-weight-value');
+    clone.style.display = '';
+    $all('[disabled]', clone).forEach(function(el) {
+      el.removeAttribute('disabled');
+    });
+
+    var index = tbody.querySelectorAll('.idm-weight-row:not([data-template])').length;
+    $all('[name]', clone).forEach(function(el) {
+      var name = el.getAttribute('name');
+      if (name) {
+        el.setAttribute('name', name.replace('__INDEX__', index));
+      }
+      if (el.tagName === 'INPUT') {
+        el.value = '';
+      }
+    });
+
+    var select = $('select', clone);
+    if (select) {
+      select.value = initialData && initialData.field ? initialData.field : 'email';
+    }
+
+    var textInput = $('input[type="text"]', clone);
     if (textInput) {
       var textValue = initialData && initialData.value ? initialData.value : '';
       textInput.value = textValue;
@@ -52,6 +74,7 @@
     }
 
     var number = clone.querySelector('.idm-weight-weight');
+    var number = $('input[type="number"]', clone);
     if (number) {
       var fallback = number.getAttribute('value') || (window.idmDashboard && idmDashboard.defaultWeight ? idmDashboard.defaultWeight : 100);
       var weightValue = (initialData && typeof initialData.weight !== 'undefined') ? initialData.weight : fallback;
@@ -91,6 +114,7 @@
     weightInvalid: '抽選確率は1以上の数値を入力してください。',
     applySuccess: '抽選確率を適用しました。設定を保存してください。',
     applyPartial: '抽選確率を適用しましたが、名前が未設定の応募者は対象外です。',
+    applyPartial: '抽選確率を適用しましたが、メールアドレスまたは名前が未設定の応募者は対象外です。',
     applyFailed: '抽選確率を適用できませんでした。対象となる応募者を選択してください。'
   };
 
@@ -157,6 +181,10 @@
     entries.forEach(function(entry) {
       var li = document.createElement('li');
       var label = entry.displayName || entry.rawName || '';
+      var label = entry.displayName;
+      if (entry.displayEmail) {
+        label += ' (' + entry.displayEmail + ')';
+      }
       li.textContent = label;
       selectedList.appendChild(li);
     });
@@ -190,6 +218,12 @@
         return false;
       }
       if (fieldInput.value === field && valueInput.value === value) {
+      var select = $('select', row);
+      var textInput = $('input[type="text"]', row);
+      if (!select || !textInput) {
+        return false;
+      }
+      if (select.value === field && textInput.value === value) {
         targetRow = row;
         return true;
       }
@@ -217,6 +251,18 @@
     }
 
     var numberEl = targetRow.querySelector('.idm-weight-weight');
+    var selectEl = $('select', targetRow);
+    if (selectEl) {
+      selectEl.value = field;
+    }
+
+    var textEl = $('input[type="text"]', targetRow);
+    if (textEl) {
+      textEl.value = value;
+      textEl.setAttribute('value', value);
+    }
+
+    var numberEl = $('input[type="number"]', targetRow);
     if (numberEl) {
       numberEl.value = weight;
       numberEl.setAttribute('value', weight);
@@ -250,6 +296,22 @@
           memberId: memberId,
           rawName: rawName,
           displayName: displayName || ''
+        var emailEl = $('.idm-entrant-email', row);
+        var displayName = nameEl ? nameEl.textContent.trim() : '';
+        if (!displayName) {
+          displayName = row.getAttribute('data-name') || '';
+        }
+        var displayEmail = emailEl ? emailEl.textContent.trim() : '';
+        if (!displayEmail) {
+          displayEmail = row.getAttribute('data-email') || '';
+        }
+
+        addSelectedEntry(memberId, {
+          memberId: memberId,
+          rawName: row.getAttribute('data-name') || '',
+          rawEmail: row.getAttribute('data-email') || '',
+          displayName: displayName,
+          displayEmail: displayEmail
         });
         row.classList.add('is-selected');
       } else {
@@ -290,6 +352,13 @@
           return;
         }
         if (ensureWeightRow('name', value, weightValue)) {
+        var field = entry.rawEmail ? 'email' : (entry.rawName ? 'name' : '');
+        var value = entry.rawEmail ? entry.rawEmail : entry.rawName;
+        if (!field || !value) {
+          skipped++;
+          return;
+        }
+        if (ensureWeightRow(field, value, weightValue)) {
           processed++;
         } else {
           skipped++;
