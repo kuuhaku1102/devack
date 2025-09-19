@@ -80,9 +80,44 @@
   color: #0073aa;
 }
 
+.idm-dashboard .idm-draw-result .winner-weight {
+  color: #50575e;
+}
+
 .idm-dashboard .idm-draw-result .error {
   color: #d63638;
   font-weight: 500;
+}
+
+.idm-dashboard .idm-draw-result .idm-winner-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.idm-dashboard .idm-draw-actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.idm-dashboard .idm-draw-message {
+  font-weight: 600;
+}
+
+.idm-dashboard .idm-draw-message.is-success {
+  color: #007017;
+}
+
+.idm-dashboard .idm-draw-message.is-error {
+  color: #d63638;
+}
+
+.idm-dashboard .idm-draw-message.is-saving {
+  color: #2271b1;
 }
 
 .idm-dashboard .idm-empty {

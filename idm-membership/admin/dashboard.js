@@ -99,7 +99,11 @@
     weightInvalid: '抽選確率は1以上の数値を入力してください。',
     applySuccess: '抽選確率を適用しました。設定を保存してください。',
     applyPartial: '抽選確率を適用しましたが、名前が未設定の応募者は対象外です。',
-    applyFailed: '抽選確率を適用できませんでした。対象となる応募者を選択してください。'
+    applyFailed: '抽選確率を適用できませんでした。対象となる応募者を選択してください。',
+    saveButton: '抽選結果を保存',
+    saveSaving: '保存中...',
+    saveSuccess: '抽選結果を保存しました。',
+    saveError: '抽選結果の保存に失敗しました。'
   };
 
   function getMessage(key) {
@@ -327,6 +331,10 @@
 
   var drawButton = document.getElementById('idm-draw-button');
   var resultBox = document.getElementById('idm-draw-result');
+  var currentWinner = null;
+  var saveControls = null;
+  var saveButtonEl = null;
+  var saveStatusEl = null;
 
   if (drawButton && resultBox && typeof window.idmDashboard !== 'undefined') {
     drawButton.addEventListener('click', function() {
@@ -338,6 +346,17 @@
       }
 
       drawButton.disabled = true;
+      currentWinner = null;
+
+      if (saveStatusEl) {
+        saveStatusEl.textContent = '';
+        saveStatusEl.className = 'idm-draw-message';
+      }
+      if (saveButtonEl) {
+        saveButtonEl.disabled = false;
+        saveButtonEl.textContent = getMessage('saveButton');
+      }
+
       resultBox.textContent = idmDashboard.i18n ? idmDashboard.i18n.drawing : 'Drawing...';
 
       var formData = new FormData();
@@ -377,9 +396,141 @@
       return;
     }
     resultBox.innerHTML = '<span class="error">' + escapeHtml(message) + '</span>';
+    currentWinner = null;
+    if (saveStatusEl) {
+      saveStatusEl.textContent = '';
+      saveStatusEl.className = 'idm-draw-message';
+    }
+    if (saveButtonEl) {
+      saveButtonEl.disabled = false;
+      saveButtonEl.textContent = getMessage('saveButton');
+    }
     if (drawButton) {
       drawButton.disabled = false;
     }
+  }
+
+  function ensureSaveControls() {
+    if (!resultBox) {
+      return;
+    }
+
+    if (!saveControls) {
+      saveControls = document.createElement('div');
+      saveControls.className = 'idm-draw-actions';
+
+      saveButtonEl = document.createElement('button');
+      saveButtonEl.type = 'button';
+      saveButtonEl.className = 'button button-secondary idm-save-draw';
+      saveButtonEl.textContent = getMessage('saveButton');
+      saveButtonEl.addEventListener('click', handleSaveClick);
+      saveControls.appendChild(saveButtonEl);
+
+      saveStatusEl = document.createElement('span');
+      saveStatusEl.className = 'idm-draw-message';
+      saveControls.appendChild(saveStatusEl);
+    }
+
+    if (saveButtonEl) {
+      saveButtonEl.textContent = getMessage('saveButton');
+    }
+
+    if (!resultBox.contains(saveControls)) {
+      resultBox.appendChild(saveControls);
+    }
+  }
+
+  function showSaveControls(state, message) {
+    if (!resultBox) {
+      return;
+    }
+
+    ensureSaveControls();
+
+    if (saveButtonEl) {
+      if (state === 'saving' || state === 'success') {
+        saveButtonEl.disabled = true;
+      } else {
+        saveButtonEl.disabled = false;
+      }
+      saveButtonEl.textContent = getMessage('saveButton');
+    }
+
+    if (saveStatusEl) {
+      saveStatusEl.textContent = message || '';
+      saveStatusEl.className = 'idm-draw-message';
+      if (state && state !== 'ready') {
+        saveStatusEl.classList.add('is-' + state);
+      }
+    }
+  }
+
+  function handleSaveClick() {
+    if (!currentWinner || !idmDashboard || !idmDashboard.ajaxUrl) {
+      return;
+    }
+    if (!idmDashboard.campaign) {
+      return;
+    }
+
+    var entryId = parseInt(currentWinner.entry_id, 10);
+    var memberId = parseInt(currentWinner.member_id, 10);
+    var hasIdentifier = (entryId && entryId > 0) || (memberId && memberId > 0);
+
+    if (!hasIdentifier) {
+      showSaveControls('error', getMessage('saveError'));
+      return;
+    }
+
+    showSaveControls('saving', getMessage('saveSaving'));
+
+    var formData = new FormData();
+    formData.append('action', 'idm_campaign_save_winner');
+    formData.append('nonce', idmDashboard.nonce);
+    formData.append('campaign', idmDashboard.campaign);
+    if (entryId && entryId > 0) {
+      formData.append('entry_id', entryId);
+    }
+    if (memberId && memberId > 0) {
+      formData.append('member_id', memberId);
+    }
+
+    fetch(idmDashboard.ajaxUrl, {
+      method: 'POST',
+      credentials: 'same-origin',
+      body: formData
+    })
+      .then(function(response) { return response.json(); })
+      .then(function(json) {
+        if (!json || !json.success) {
+          var message = json && json.data && json.data.message ? json.data.message : getMessage('saveError');
+          showSaveControls('error', message);
+          return;
+        }
+
+        if (json.data && json.data.winner) {
+          currentWinner = json.data.winner;
+        }
+        if (json.data && json.data.record_id) {
+          currentWinner.record_id = json.data.record_id;
+        }
+
+        var successMessage = (json.data && json.data.message) ? json.data.message : getMessage('saveSuccess');
+        showSaveControls('success', successMessage);
+      })
+      .catch(function() {
+        showSaveControls('error', getMessage('saveError'));
+      });
+  }
+
+  function getDefaultWeight() {
+    if (window.idmDashboard && typeof idmDashboard.defaultWeight !== 'undefined') {
+      var parsed = parseInt(idmDashboard.defaultWeight, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+    return 100;
   }
 
   function animateRoulette(winner) {
@@ -461,10 +612,35 @@
     if (!resultBox) {
       return;
     }
-    var name = winner.name ? winner.name : '(未設定)';
-    var chance = winner.weight ? winner.weight : 100;
-    var html = '<span class="winner">' + escapeHtml(name) + '</span> - ' + chance + '%';
-    resultBox.innerHTML = html;
+
+    currentWinner = winner || null;
+    resultBox.innerHTML = '';
+
+    if (!winner) {
+      return;
+    }
+
+    var summary = document.createElement('div');
+    summary.className = 'idm-winner-summary';
+
+    var nameEl = document.createElement('span');
+    nameEl.className = 'winner';
+    nameEl.textContent = winner.name ? winner.name : '(未設定)';
+    summary.appendChild(nameEl);
+
+    var chance = parseInt(winner.weight, 10);
+    if (!chance || chance <= 0) {
+      chance = getDefaultWeight();
+    }
+
+    var chanceEl = document.createElement('span');
+    chanceEl.className = 'winner-weight';
+    chanceEl.textContent = chance + '%';
+    summary.appendChild(document.createTextNode(' - '));
+    summary.appendChild(chanceEl);
+
+    resultBox.appendChild(summary);
+    showSaveControls('ready', '');
   }
 
   function escapeHtml(str) {

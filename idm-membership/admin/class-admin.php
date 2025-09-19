@@ -16,6 +16,7 @@ class Admin {
         add_action('admin_menu', [__CLASS__, 'register_menu']);
         add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_assets']);
         add_action('wp_ajax_idm_campaign_draw', [__CLASS__, 'ajax_draw_campaign']);
+        add_action('wp_ajax_idm_campaign_save_winner', [__CLASS__, 'ajax_save_winner']);
     }
 
     public static function register_menu() {
@@ -72,6 +73,10 @@ class Admin {
                     'applySuccess'  => __('抽選確率を適用しました。設定を保存してください。', 'idm-membership'),
                     'applyPartial'  => __('抽選確率を適用しましたが、名前が未設定の応募者は対象外です。', 'idm-membership'),
                     'applyFailed'   => __('抽選確率を適用できませんでした。対象となる応募者を選択してください。', 'idm-membership'),
+                    'saveButton'    => __('抽選結果を保存', 'idm-membership'),
+                    'saveSaving'    => __('保存中...', 'idm-membership'),
+                    'saveSuccess'   => __('抽選結果を保存しました。', 'idm-membership'),
+                    'saveError'     => __('抽選結果を保存できませんでした。', 'idm-membership'),
                 ],
             ]
         );
@@ -494,19 +499,77 @@ class Admin {
             wp_send_json_error(['message' => __('抽選に失敗しました。', 'idm-membership')]);
         }
 
+        wp_send_json_success([
+            'winner' => [
+                'member_id' => $winner['member_id'],
+                'entry_id'  => isset($winner['id']) ? (int) $winner['id'] : 0,
+                'name'      => isset($winner['name']) ? $winner['name'] : '',
+                'email'     => isset($winner['email']) ? $winner['email'] : '',
+                'weight'    => isset($winner['weight']) ? (int) $winner['weight'] : self::DEFAULT_WEIGHT,
+                'record_id' => 0,
+            ],
+        ]);
+    }
+
+    public static function ajax_save_winner() {
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('権限がありません。', 'idm-membership')], 403);
+        }
+
+        check_ajax_referer('idm_draw_campaign', 'nonce');
+
+        $campaign = isset($_POST['campaign']) ? sanitize_key(wp_unslash($_POST['campaign'])) : '';
+        if ($campaign === '') {
+            wp_send_json_error(['message' => __('キャンペーンが指定されていません。', 'idm-membership')]);
+        }
+
+        $entry_id  = isset($_POST['entry_id']) ? intval($_POST['entry_id']) : 0;
+        $member_id = isset($_POST['member_id']) ? intval($_POST['member_id']) : 0;
+
+        $entries = self::get_campaign_entries($campaign);
+        if (empty($entries)) {
+            wp_send_json_error(['message' => __('応募者が存在しません。', 'idm-membership')]);
+        }
+
+        $weights = self::get_weight_options();
+        $entries = self::apply_weights($entries, $weights[$campaign] ?? []);
+
+        $winner = null;
+        foreach ($entries as $entry) {
+            if ($entry_id > 0 && (int) $entry['id'] === $entry_id) {
+                $winner = $entry;
+                break;
+            }
+        }
+
+        if ($winner === null && $member_id > 0) {
+            foreach ($entries as $entry) {
+                if ((int) $entry['member_id'] === $member_id) {
+                    $winner = $entry;
+                    break;
+                }
+            }
+        }
+
+        if ($winner === null) {
+            wp_send_json_error(['message' => __('該当する応募者が見つかりません。', 'idm-membership')]);
+        }
+
         $record_id = self::record_winner($campaign, $winner);
         if ($record_id === false) {
             wp_send_json_error(['message' => __('抽選結果を保存できませんでした。', 'idm-membership')]);
         }
 
         wp_send_json_success([
-            'winner' => [
-                'member_id' => $winner['member_id'],
+            'record_id' => $record_id,
+            'winner'    => [
+                'member_id' => (int) $winner['member_id'],
                 'entry_id'  => isset($winner['id']) ? (int) $winner['id'] : 0,
-                'name'      => isset($winner['name']) ? $winner['name'] : '',
+                'name'      => isset($winner['name']) ? (string) $winner['name'] : '',
+                'email'     => isset($winner['email']) ? (string) $winner['email'] : '',
                 'weight'    => isset($winner['weight']) ? (int) $winner['weight'] : self::DEFAULT_WEIGHT,
-                'record_id' => $record_id,
             ],
+            'message'   => __('抽選結果を保存しました。', 'idm-membership'),
         ]);
     }
 
