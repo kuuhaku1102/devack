@@ -7,11 +7,11 @@
     return Array.prototype.slice.call((context || document).querySelectorAll(selector));
   }
 
-  function addWeightRow() {
+  function addWeightRow(initialData) {
     var template = document.querySelector('.idm-weight-row[data-template="1"]');
     var tbody = document.getElementById('idm-weight-rows');
     if (!template || !tbody) {
-      return;
+      return null;
     }
 
     var clone = template.cloneNode(true);
@@ -35,17 +35,26 @@
 
     var select = $('select', clone);
     if (select) {
-      select.value = 'email';
+      select.value = initialData && initialData.field ? initialData.field : 'email';
+    }
+
+    var textInput = $('input[type="text"]', clone);
+    if (textInput) {
+      var textValue = initialData && initialData.value ? initialData.value : '';
+      textInput.value = textValue;
+      textInput.setAttribute('value', textValue);
     }
 
     var number = $('input[type="number"]', clone);
     if (number) {
-      var baseValue = number.getAttribute('value') || 100;
-      number.value = baseValue;
-      number.setAttribute('value', baseValue);
+      var fallback = number.getAttribute('value') || (window.idmDashboard && idmDashboard.defaultWeight ? idmDashboard.defaultWeight : 100);
+      var weightValue = (initialData && typeof initialData.weight !== 'undefined') ? initialData.weight : fallback;
+      number.value = weightValue;
+      number.setAttribute('value', weightValue);
     }
 
     tbody.appendChild(clone);
+    return clone;
   }
 
   var addButton = document.getElementById('idm-add-weight');
@@ -62,6 +71,245 @@
       }
     }
   });
+
+  var selectedEntries = {};
+  var selectedOrder = [];
+  var selectedList = document.querySelector('.idm-selected-list');
+  var selectedEmpty = document.querySelector('.idm-selected-empty');
+  var selectedMessage = document.querySelector('.idm-selected-message');
+  var selectedWeightInput = document.querySelector('.idm-selected-weight');
+  var applySelectedButton = document.querySelector('.idm-selected-apply');
+  var messageFallbacks = {
+    selectedNone: '選択された応募者がありません。',
+    weightInvalid: '抽選確率は1以上の数値を入力してください。',
+    applySuccess: '抽選確率を適用しました。設定を保存してください。',
+    applyPartial: '抽選確率を適用しましたが、メールアドレスまたは名前が未設定の応募者は対象外です。',
+    applyFailed: '抽選確率を適用できませんでした。対象となる応募者を選択してください。'
+  };
+
+  function getMessage(key) {
+    if (window.idmDashboard && idmDashboard.i18n && idmDashboard.i18n[key]) {
+      return idmDashboard.i18n[key];
+    }
+    return messageFallbacks[key] || '';
+  }
+
+  function setSelectedMessage(text, status) {
+    if (!selectedMessage) {
+      return;
+    }
+    selectedMessage.textContent = text || '';
+    selectedMessage.className = 'idm-selected-message';
+    if (status) {
+      selectedMessage.classList.add('is-' + status);
+    }
+  }
+
+  function addSelectedEntry(id, data) {
+    if (!selectedEntries[id]) {
+      selectedOrder.push(id);
+    }
+    selectedEntries[id] = data;
+  }
+
+  function removeSelectedEntry(id) {
+    if (!selectedEntries[id]) {
+      return;
+    }
+    delete selectedEntries[id];
+    var index = selectedOrder.indexOf(id);
+    if (index >= 0) {
+      selectedOrder.splice(index, 1);
+    }
+  }
+
+  function getSelectedEntries() {
+    return selectedOrder
+      .map(function(id) { return selectedEntries[id]; })
+      .filter(function(entry) { return !!entry; });
+  }
+
+  function updateSelectedDisplay() {
+    if (!selectedList || !selectedEmpty) {
+      return;
+    }
+
+    var entries = getSelectedEntries();
+    selectedList.innerHTML = '';
+
+    if (!entries.length) {
+      selectedList.style.display = 'none';
+      selectedEmpty.style.display = '';
+      setSelectedMessage('');
+      return;
+    }
+
+    selectedEmpty.style.display = 'none';
+    selectedList.style.display = '';
+
+    entries.forEach(function(entry) {
+      var li = document.createElement('li');
+      var label = entry.displayName;
+      if (entry.displayEmail) {
+        label += ' (' + entry.displayEmail + ')';
+      }
+      li.textContent = label;
+      selectedList.appendChild(li);
+    });
+  }
+
+  function highlightWeightRow(row) {
+    if (!row) {
+      return;
+    }
+    row.classList.add('is-highlighted');
+    setTimeout(function() {
+      row.classList.remove('is-highlighted');
+    }, 1500);
+  }
+
+  function ensureWeightRow(field, value, weight) {
+    var tbody = document.getElementById('idm-weight-rows');
+    if (!tbody) {
+      return null;
+    }
+
+    var rows = $all('.idm-weight-row', tbody).filter(function(row) {
+      return !row.hasAttribute('data-template');
+    });
+
+    var targetRow = null;
+    rows.some(function(row) {
+      var select = $('select', row);
+      var textInput = $('input[type="text"]', row);
+      if (!select || !textInput) {
+        return false;
+      }
+      if (select.value === field && textInput.value === value) {
+        targetRow = row;
+        return true;
+      }
+      return false;
+    });
+
+    if (!targetRow) {
+      targetRow = addWeightRow({ field: field, value: value, weight: weight });
+    }
+
+    if (!targetRow) {
+      return null;
+    }
+
+    var selectEl = $('select', targetRow);
+    if (selectEl) {
+      selectEl.value = field;
+    }
+
+    var textEl = $('input[type="text"]', targetRow);
+    if (textEl) {
+      textEl.value = value;
+      textEl.setAttribute('value', value);
+    }
+
+    var numberEl = $('input[type="number"]', targetRow);
+    if (numberEl) {
+      numberEl.value = weight;
+      numberEl.setAttribute('value', weight);
+    }
+
+    highlightWeightRow(targetRow);
+    return targetRow;
+  }
+
+  $all('.idm-entrant-select').forEach(function(checkbox) {
+    checkbox.addEventListener('change', function() {
+      var row = checkbox.closest('.idm-entrant');
+      if (!row) {
+        return;
+      }
+
+      var memberId = row.getAttribute('data-member-id') || checkbox.value;
+      if (!memberId) {
+        return;
+      }
+      memberId = String(memberId);
+
+      if (checkbox.checked) {
+        var nameEl = $('.idm-entrant-name-text', row);
+        var emailEl = $('.idm-entrant-email', row);
+        var displayName = nameEl ? nameEl.textContent.trim() : '';
+        if (!displayName) {
+          displayName = row.getAttribute('data-name') || '';
+        }
+        var displayEmail = emailEl ? emailEl.textContent.trim() : '';
+        if (!displayEmail) {
+          displayEmail = row.getAttribute('data-email') || '';
+        }
+
+        addSelectedEntry(memberId, {
+          memberId: memberId,
+          rawName: row.getAttribute('data-name') || '',
+          rawEmail: row.getAttribute('data-email') || '',
+          displayName: displayName,
+          displayEmail: displayEmail
+        });
+        row.classList.add('is-selected');
+      } else {
+        removeSelectedEntry(memberId);
+        row.classList.remove('is-selected');
+      }
+
+      updateSelectedDisplay();
+    });
+  });
+
+  if (applySelectedButton) {
+    applySelectedButton.addEventListener('click', function() {
+      var entries = getSelectedEntries();
+      if (!entries.length) {
+        setSelectedMessage(getMessage('selectedNone'), 'warning');
+        return;
+      }
+
+      if (!selectedWeightInput) {
+        return;
+      }
+
+      var weightValue = parseInt(selectedWeightInput.value, 10);
+      if (!weightValue || weightValue <= 0) {
+        setSelectedMessage(getMessage('weightInvalid'), 'error');
+        selectedWeightInput.focus();
+        return;
+      }
+
+      var processed = 0;
+      var skipped = 0;
+
+      entries.forEach(function(entry) {
+        var field = entry.rawEmail ? 'email' : (entry.rawName ? 'name' : '');
+        var value = entry.rawEmail ? entry.rawEmail : entry.rawName;
+        if (!field || !value) {
+          skipped++;
+          return;
+        }
+        if (ensureWeightRow(field, value, weightValue)) {
+          processed++;
+        } else {
+          skipped++;
+        }
+      });
+
+      if (processed > 0 && skipped === 0) {
+        setSelectedMessage(getMessage('applySuccess'), 'success');
+      } else if (processed > 0) {
+        setSelectedMessage(getMessage('applyPartial'), 'warning');
+      } else {
+        setSelectedMessage(getMessage('applyFailed'), 'error');
+      }
+    });
+  }
+
+  updateSelectedDisplay();
 
   var drawButton = document.getElementById('idm-draw-button');
   var resultBox = document.getElementById('idm-draw-result');
