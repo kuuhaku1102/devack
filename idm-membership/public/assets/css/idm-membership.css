@@ -1,6 +1,0 @@
-/* Minimal styles for IDM Membership forms */
-.idm-form{max-width:420px;padding:16px;border:1px solid #eee;border-radius:10px;background:#fff;margin:12px 0}
-.idm-form input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px}
-.idm-form button{padding:10px 16px;border:0;border-radius:8px;background:#111;color:#fff;cursor:pointer}
-.idm-err{background:#fee;border:1px solid #f99;padding:8px;margin:0 0 12px;border-radius:6px}
-.idm-ok{background:#eef9ee;border:1px solid #a7d7a7;padding:8px;margin:0 0 12px;border-radius:6px}
