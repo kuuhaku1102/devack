@@ -509,6 +509,13 @@
   }
 
   function displayWinner(winner, persistence) {
+      if (drawButton) {
+        drawButton.disabled = false;
+      }
+    }, totalDelay + 50);
+  }
+
+  function displayWinner(winner) {
     if (!resultBox) {
       return;
     }
@@ -520,7 +527,6 @@
       var level = persistence.level ? ' is-' + persistence.level : '';
       html += '<div class="idm-draw-note' + level + '">' + escapeHtml(persistence.message) + '</div>';
     }
-
     resultBox.innerHTML = html;
   }
 

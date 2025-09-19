@@ -537,6 +537,20 @@ class Admin {
         }
 
         wp_send_json_success($response);
+        $record_id = self::record_winner($campaign, $winner);
+        if ($record_id === false) {
+            wp_send_json_error(['message' => __('抽選結果を保存できませんでした。', 'idm-membership')]);
+        }
+
+        wp_send_json_success([
+            'winner' => [
+                'member_id' => $winner['member_id'],
+                'entry_id'  => isset($winner['id']) ? (int) $winner['id'] : 0,
+                'name'      => isset($winner['name']) ? $winner['name'] : '',
+                'weight'    => isset($winner['weight']) ? (int) $winner['weight'] : self::DEFAULT_WEIGHT,
+                'record_id' => $record_id,
+            ],
+        ]);
     }
 
     private static function pick_winner(array $entries) {
@@ -634,6 +648,13 @@ class Admin {
             'winner_email'     => $snapshot['winner_email'],
             'winner_weight'    => $snapshot['winner_weight'],
             'drawn_at'         => $snapshot['drawn_at'],
+            'campaign_key'     => $campaign,
+            'winner_member_id' => isset($winner['member_id']) ? (int) $winner['member_id'] : 0,
+            'entry_id'         => isset($winner['id']) ? (int) $winner['id'] : 0,
+            'winner_name'      => isset($winner['name']) ? (string) $winner['name'] : '',
+            'winner_email'     => isset($winner['email']) ? (string) $winner['email'] : '',
+            'winner_weight'    => isset($winner['weight']) ? (int) $winner['weight'] : self::DEFAULT_WEIGHT,
+            'drawn_at'         => current_time('mysql'),
         ];
 
         $formats = ['%s', '%d', '%d', '%s', '%s', '%d', '%s'];
@@ -649,6 +670,9 @@ class Admin {
             if (!empty($wpdb->last_error)) {
                 error_log('[IDM] Failed to record campaign winner: ' . $wpdb->last_error);
             }
+        $result = $wpdb->insert($table, $data, $formats);
+
+        if ($result === false) {
             return false;
         }
 
