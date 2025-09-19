@@ -36,6 +36,26 @@
   width: 6em;
 }
 
+.idm-dashboard .idm-weights-form .idm-weight-identifier {
+  min-width: 220px;
+}
+
+.idm-dashboard .idm-weights-form .idm-weight-field-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.idm-dashboard .idm-weights-form .idm-weight-field-label.is-legacy {
+  color: #d63638;
+}
+
+.idm-dashboard .idm-weights-form .idm-weight-legacy-note {
+  margin: 4px 0 0;
+  color: #646970;
+  font-size: 12px;
+}
+
 .idm-dashboard .idm-weights-form .idm-column-actions {
   width: 100px;
   text-align: center;
@@ -63,6 +83,21 @@
 .idm-dashboard .idm-draw-result .error {
   color: #d63638;
   font-weight: 500;
+}
+
+.idm-dashboard .idm-draw-result .idm-draw-note {
+  margin-top: 8px;
+  font-size: 0.95em;
+  font-weight: 500;
+  color: #646970;
+}
+
+.idm-dashboard .idm-draw-result .idm-draw-note.is-warning {
+  color: #dba617;
+}
+
+.idm-dashboard .idm-draw-result .idm-draw-note.is-success {
+  color: #007017;
 }
 
 .idm-dashboard .idm-empty {

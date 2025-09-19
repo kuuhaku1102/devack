@@ -29,6 +29,8 @@ class Install {
         // Optional safety: ensure name/role exist (older drafts)
         self::ensure_column($members, 'name', "VARCHAR(255) NOT NULL DEFAULT ''");
         self::ensure_column($members, 'role', "VARCHAR(50) NOT NULL DEFAULT 'member'");
+
+        self::ensure_winners_table();
     }
 
     private static function ensure_column($table, $column, $definition) {
@@ -103,5 +105,43 @@ class Install {
         dbDelta($sql_tokens);
         dbDelta($sql_tags);
         dbDelta($sql_joins);
+        dbDelta(self::winners_table_sql($charset_collate));
+    }
+
+    private static function ensure_winners_table() {
+        global $wpdb;
+        $winners = $wpdb->prefix . 'idm_campaign_winners';
+        $exists  = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $winners));
+
+        if ($exists !== $winners) {
+            require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+            dbDelta(self::winners_table_sql($wpdb->get_charset_collate()));
+            return;
+        }
+
+        self::ensure_column($winners, 'entry_id', "BIGINT(20) UNSIGNED NULL");
+        self::ensure_column($winners, 'winner_name', "VARCHAR(255) NOT NULL DEFAULT ''");
+        self::ensure_column($winners, 'winner_email', "VARCHAR(190) NOT NULL DEFAULT ''");
+        self::ensure_column($winners, 'winner_weight', "INT(11) NOT NULL DEFAULT 0");
+        self::ensure_column($winners, 'drawn_at', "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'");
+    }
+
+    private static function winners_table_sql($charset_collate) {
+        global $wpdb;
+        $winners = $wpdb->prefix . 'idm_campaign_winners';
+
+        return "CREATE TABLE {$winners} (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            campaign_key VARCHAR(100) NOT NULL,
+            winner_member_id BIGINT(20) UNSIGNED NOT NULL,
+            entry_id BIGINT(20) UNSIGNED NULL,
+            winner_name VARCHAR(255) NOT NULL DEFAULT '',
+            winner_email VARCHAR(190) NOT NULL DEFAULT '',
+            winner_weight INT(11) NOT NULL DEFAULT 0,
+            drawn_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
+            PRIMARY KEY  (id),
+            KEY campaign_key (campaign_key),
+            KEY winner_member_id (winner_member_id)
+        ) {$charset_collate};";
     }
 }
