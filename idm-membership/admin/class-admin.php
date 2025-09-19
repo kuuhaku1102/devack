@@ -72,9 +72,15 @@ class Admin {
                 'ajaxUrl'  => admin_url('admin-ajax.php'),
                 'nonce'    => wp_create_nonce('idm_draw_campaign'),
                 'campaign' => $selected_campaign,
+                'defaultWeight' => self::DEFAULT_WEIGHT,
                 'i18n'     => [
-                    'noEntries' => __('応募者がいません。', 'idm-membership'),
-                    'drawing'   => __('抽選中...', 'idm-membership'),
+                    'noEntries'     => __('応募者がいません。', 'idm-membership'),
+                    'drawing'       => __('抽選中...', 'idm-membership'),
+                    'selectedNone'  => __('選択された応募者がありません。', 'idm-membership'),
+                    'weightInvalid' => __('抽選確率は1以上の数値を入力してください。', 'idm-membership'),
+                    'applySuccess'  => __('抽選確率を適用しました。設定を保存してください。', 'idm-membership'),
+                    'applyPartial'  => __('抽選確率を適用しましたが、メールアドレスまたは名前が未設定の応募者は対象外です。', 'idm-membership'),
+                    'applyFailed'   => __('抽選確率を適用できませんでした。対象となる応募者を選択してください。', 'idm-membership'),
                 ],
             ]
         );
@@ -181,19 +187,46 @@ class Admin {
         echo '</tr></thead>';
         echo '<tbody class="idm-entrant-list">';
         foreach ($entries as $entry) {
-            $name  = $entry['name'] !== '' ? $entry['name'] : __('(未設定)', 'idm-membership');
-            $email = $entry['email'] !== '' ? $entry['email'] : __('(メール不明)', 'idm-membership');
+            $raw_name  = isset($entry['name']) ? (string) $entry['name'] : '';
+            $raw_email = isset($entry['email']) ? (string) $entry['email'] : '';
+            $name      = $raw_name !== '' ? $raw_name : __('(未設定)', 'idm-membership');
+            $email     = $raw_email !== '' ? $raw_email : __('(メール不明)', 'idm-membership');
+            $joined_at = isset($entry['joined_at']) ? (string) $entry['joined_at'] : '';
+            $weight    = isset($entry['weight']) ? (int) $entry['weight'] : self::DEFAULT_WEIGHT;
+
             printf(
-                '<tr class="idm-entrant" data-member-id="%1$d" data-weight="%4$d"><td>%2$s</td><td>%3$s</td><td>%5$s</td><td>%4$d</td></tr>',
+                '<tr class="idm-entrant" data-member-id="%1$d" data-weight="%5$d" data-name="%6$s" data-email="%7$s">'
+                . '<td class="idm-entrant-name"><label><input type="checkbox" class="idm-entrant-select" value="%1$d" /> '
+                . '<span class="idm-entrant-name-text">%2$s</span></label></td>'
+                . '<td class="idm-entrant-email">%3$s</td>'
+                . '<td>%4$s</td>'
+                . '<td class="idm-entrant-weight">%5$d</td>'
+                . '</tr>',
                 (int) $entry['member_id'],
                 esc_html($name),
                 esc_html($email),
-                (int) $entry['weight'],
-                esc_html($entry['joined_at'])
+                esc_html($joined_at),
+                (int) $weight,
+                esc_attr($raw_name),
+                esc_attr($raw_email)
             );
         }
         echo '</tbody>';
         echo '</table>';
+
+        $empty_text = __('応募者一覧でチェックを入れるとここに表示されます。', 'idm-membership');
+        echo '<div class="idm-selected-panel">';
+        echo '<h3>' . esc_html__('選択中の応募者', 'idm-membership') . '</h3>';
+        echo '<p class="idm-selected-empty" data-empty-text="' . esc_attr($empty_text) . '">' . esc_html($empty_text) . '</p>';
+        echo '<ul class="idm-selected-list"></ul>';
+        echo '<div class="idm-selected-actions">';
+        echo '<label>' . esc_html__('抽選確率(%)', 'idm-membership') . ' ';
+        echo '<input type="number" class="small-text idm-selected-weight" min="1" max="1000" step="1" value="' . esc_attr(self::DEFAULT_WEIGHT) . '" /></label> ';
+        echo '<button type="button" class="button idm-selected-apply">' . esc_html__('選択中に適用', 'idm-membership') . '</button>';
+        echo '</div>';
+        echo '<p class="description idm-selected-note">' . esc_html__('抽選確率の適用後は「設定を保存」を押して確定してください。', 'idm-membership') . '</p>';
+        echo '<p class="idm-selected-message" aria-live="polite"></p>';
+        echo '</div>';
     }
 
     private static function render_weights_form($campaign, array $weights) {
