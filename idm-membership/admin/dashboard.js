@@ -22,6 +22,34 @@
       el.removeAttribute('disabled');
     });
 
+    var nextIndex = parseInt(tbody.getAttribute('data-next-index') || '0', 10);
+    if (isNaN(nextIndex) || nextIndex < 0) {
+      nextIndex = 0;
+    }
+    $all('[name]', clone).forEach(function(el) {
+      var name = el.getAttribute('name');
+      if (name) {
+        el.setAttribute('name', name.replace('__INDEX__', nextIndex));
+      }
+      if (el.tagName === 'INPUT') {
+        el.value = '';
+        el.setAttribute('value', '');
+      }
+    });
+
+    var fieldInput = clone.querySelector('.idm-weight-field');
+    if (fieldInput) {
+      var fieldValue = initialData && initialData.field ? initialData.field : 'name';
+      fieldInput.value = fieldValue;
+      fieldInput.setAttribute('value', fieldValue);
+    }
+
+    var textInput = clone.querySelector('.idm-weight-value');
+    clone.style.display = '';
+    $all('[disabled]', clone).forEach(function(el) {
+      el.removeAttribute('disabled');
+    });
+
     var index = tbody.querySelectorAll('.idm-weight-row:not([data-template])').length;
     $all('[name]', clone).forEach(function(el) {
       var name = el.getAttribute('name');
@@ -45,6 +73,7 @@
       textInput.setAttribute('value', textValue);
     }
 
+    var number = clone.querySelector('.idm-weight-weight');
     var number = $('input[type="number"]', clone);
     if (number) {
       var fallback = number.getAttribute('value') || (window.idmDashboard && idmDashboard.defaultWeight ? idmDashboard.defaultWeight : 100);
@@ -54,6 +83,7 @@
     }
 
     tbody.appendChild(clone);
+    tbody.setAttribute('data-next-index', String(nextIndex + 1));
     return clone;
   }
 
@@ -83,6 +113,7 @@
     selectedNone: '選択された応募者がありません。',
     weightInvalid: '抽選確率は1以上の数値を入力してください。',
     applySuccess: '抽選確率を適用しました。設定を保存してください。',
+    applyPartial: '抽選確率を適用しましたが、名前が未設定の応募者は対象外です。',
     applyPartial: '抽選確率を適用しましたが、メールアドレスまたは名前が未設定の応募者は対象外です。',
     applyFailed: '抽選確率を適用できませんでした。対象となる応募者を選択してください。'
   };
@@ -149,6 +180,7 @@
 
     entries.forEach(function(entry) {
       var li = document.createElement('li');
+      var label = entry.displayName || entry.rawName || '';
       var label = entry.displayName;
       if (entry.displayEmail) {
         label += ' (' + entry.displayEmail + ')';
@@ -180,6 +212,12 @@
 
     var targetRow = null;
     rows.some(function(row) {
+      var fieldInput = row.querySelector('.idm-weight-field');
+      var valueInput = row.querySelector('.idm-weight-value');
+      if (!fieldInput || !valueInput) {
+        return false;
+      }
+      if (fieldInput.value === field && valueInput.value === value) {
       var select = $('select', row);
       var textInput = $('input[type="text"]', row);
       if (!select || !textInput) {
@@ -200,6 +238,19 @@
       return null;
     }
 
+    var fieldEl = targetRow.querySelector('.idm-weight-field');
+    if (fieldEl) {
+      fieldEl.value = field;
+      fieldEl.setAttribute('value', field);
+    }
+
+    var valueEl = targetRow.querySelector('.idm-weight-value');
+    if (valueEl) {
+      valueEl.value = value;
+      valueEl.setAttribute('value', value);
+    }
+
+    var numberEl = targetRow.querySelector('.idm-weight-weight');
     var selectEl = $('select', targetRow);
     if (selectEl) {
       selectEl.value = field;
@@ -236,6 +287,15 @@
 
       if (checkbox.checked) {
         var nameEl = $('.idm-entrant-name-text', row);
+        var displayName = nameEl ? nameEl.textContent.trim() : '';
+        var rawName = (row.getAttribute('data-name') || '').trim();
+        if (!displayName) {
+          displayName = rawName;
+        }
+        addSelectedEntry(memberId, {
+          memberId: memberId,
+          rawName: rawName,
+          displayName: displayName || ''
         var emailEl = $('.idm-entrant-email', row);
         var displayName = nameEl ? nameEl.textContent.trim() : '';
         if (!displayName) {
@@ -286,6 +346,12 @@
       var skipped = 0;
 
       entries.forEach(function(entry) {
+        var value = (entry.rawName || '').trim();
+        if (!value) {
+          skipped++;
+          return;
+        }
+        if (ensureWeightRow('name', value, weightValue)) {
         var field = entry.rawEmail ? 'email' : (entry.rawName ? 'name' : '');
         var value = entry.rawEmail ? entry.rawEmail : entry.rawName;
         if (!field || !value) {
