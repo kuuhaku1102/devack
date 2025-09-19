@@ -106,6 +106,13 @@ class Admin {
         list($selected_entries, $manual_weights) = self::prepare_weight_selection($entries, $current_weights);
 
         echo '<div class="wrap idm-dashboard" data-default-weight="' . esc_attr(self::DEFAULT_WEIGHT) . '">';
+        $entries         = ($selected_campaign !== '')
+            ? self::apply_weights(self::get_campaign_entries($selected_campaign), $current_weights)
+            : [];
+
+        list($selected_entries, $manual_weights) = self::prepare_weight_selection($entries, $current_weights);
+
+        echo '<div class="wrap idm-dashboard" data-default-weight="' . esc_attr(self::DEFAULT_WEIGHT) . '">';
         echo '<h1>' . esc_html__('独自会員 ダッシュボード', 'idm-membership') . '</h1>';
 
         self::render_notices();
@@ -124,6 +131,8 @@ class Admin {
             return;
         }
 
+        self::render_entries_section($entries, $selected_entries);
+        self::render_weights_form($selected_campaign, $manual_weights, $selected_entries);
         self::render_entries_section($entries, $selected_entries);
         self::render_weights_form($selected_campaign, $manual_weights, $selected_entries);
         self::render_draw_section($entries);
@@ -161,6 +170,306 @@ class Admin {
         echo '</form>';
     }
 
+    private static function render_entries_section(array $entries, array $selected_entries) {
+        echo '<h2>' . esc_html__('応募者一覧', 'idm-membership') . '</h2>';
+        if (empty($entries)) {
+            echo '<p class="idm-empty">' . esc_html__('応募者がまだいません。', 'idm-membership') . '</p>';
+            return;
+        }
+
+        echo '<p>' . sprintf(
+            /* translators: %d: number of entries */
+            esc_html__('応募人数: %d名', 'idm-membership'),
+            count($entries)
+        ) . '</p>';
+
+        echo '<table class="widefat fixed striped">';
+        echo '<thead><tr>';
+        echo '<th class="idm-entrant-column-select">';
+        echo '<input type="checkbox" id="idm-entrant-select-all" />';
+        echo '<label for="idm-entrant-select-all" class="screen-reader-text">' . esc_html__('全て選択', 'idm-membership') . '</label>';
+        echo '</th>';
+        echo '<th>' . esc_html__('名前', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('メールアドレス', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('応募日時', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('抽選確率(%)', 'idm-membership') . '</th>';
+        echo '</tr></thead>';
+        echo '<tbody class="idm-entrant-list">';
+        foreach ($entries as $index => $entry) {
+            $name_raw  = isset($entry['name']) ? (string) $entry['name'] : '';
+            $email_raw = isset($entry['email']) ? (string) $entry['email'] : '';
+            $name      = $name_raw !== '' ? $name_raw : __('(未設定)', 'idm-membership');
+            $email     = $email_raw !== '' ? $email_raw : __('(メール不明)', 'idm-membership');
+            $weight    = isset($entry['weight']) ? max(1, (int) $entry['weight']) : self::DEFAULT_WEIGHT;
+            $entry_key = self::get_entry_key($entry);
+            $is_selected = isset($selected_entries[$entry_key]);
+            $checkbox_id = 'idm-entrant-select-' . (isset($entry['id']) ? (int) $entry['id'] : $index);
+
+            $row_classes = ['idm-entrant'];
+            if ($is_selected) {
+                $row_classes[] = 'is-selected';
+            }
+
+            $row_attrs = sprintf(
+                ' data-entry-key="%1$s" data-member-id="%2$s" data-email="%3$s" data-name="%4$s" data-weight="%5$d" data-default-weight="%6$d"',
+                esc_attr($entry_key),
+                esc_attr((string) ($entry['member_id'] ?? '')),
+                esc_attr($email_raw),
+                esc_attr($name_raw),
+                $weight,
+                self::DEFAULT_WEIGHT
+            );
+
+            echo '<tr class="' . esc_attr(implode(' ', $row_classes)) . '"' . $row_attrs . '>';
+            echo '<td class="idm-entrant-select">';
+            echo '<input type="checkbox" class="idm-entrant-checkbox" id="' . esc_attr($checkbox_id) . '" data-entry-key="' . esc_attr($entry_key) . '" value="1"' . ($is_selected ? ' checked="checked"' : '') . ' />';
+            echo '<label for="' . esc_attr($checkbox_id) . '" class="screen-reader-text">' . esc_html__('応募者を選択', 'idm-membership') . '</label>';
+            echo '</td>';
+            echo '<td>' . esc_html($name) . '</td>';
+            echo '<td>' . esc_html($email) . '</td>';
+            echo '<td>' . esc_html($entry['joined_at']) . '</td>';
+            echo '<td class="idm-entrant-weight"><span class="idm-entrant-weight-value">' . esc_html($weight) . '</span> %</td>';
+            echo '</tr>';
+        }
+        echo '</tbody>';
+        echo '</table>';
+    }
+
+    private static function render_weights_form($campaign, array $manual_weights, array $selected_entries) {
+        echo '<h2>' . esc_html__('抽選確率の調整', 'idm-membership') . '</h2>';
+        echo '<p class="description">' . esc_html__('応募者一覧でチェックした応募者を下にまとめて表示し、抽選確率を一括で変更できます。未指定の応募者は100%（等確率）です。', 'idm-membership') . '</p>';
+
+        echo '<form method="post" class="idm-weights-form">';
+        wp_nonce_field('idm_save_weights');
+        echo '<input type="hidden" name="idm_action" value="save_weights" />';
+        echo '<input type="hidden" name="campaign" value="' . esc_attr($campaign) . '" />';
+
+        $selected_list = array_values($selected_entries);
+        $has_selected  = !empty($selected_list);
+
+        echo '<div class="idm-selected-section">';
+        echo '<h3>' . esc_html__('選択した応募者', 'idm-membership') . '</h3>';
+        echo '<p class="description">' . esc_html__('上の応募者一覧でチェックした応募者がここに表示されます。確率を入力して保存すると設定が適用されます。', 'idm-membership') . '</p>';
+        echo '<p class="idm-selected-empty"' . ($has_selected ? ' style="display:none;"' : '') . '>' . esc_html__('応募者を選択するとここに表示されます。', 'idm-membership') . '</p>';
+
+        echo '<table class="widefat fixed striped idm-selected-table">';
+        echo '<thead><tr>';
+        echo '<th>' . esc_html__('名前', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('メールアドレス', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('確率(%)', 'idm-membership') . '</th>';
+        echo '<th class="idm-column-actions"></th>';
+        echo '</tr></thead>';
+        echo '<tbody id="idm-selected-entries">';
+
+        $selected_index = 0;
+        foreach ($selected_list as $selected) {
+            self::render_selected_entry_row($selected_index, $selected);
+            $selected_index++;
+        }
+
+        echo '</tbody>';
+        echo '</table>';
+
+        echo '<div class="idm-bulk-actions idm-selected-bulk">';
+        echo '<label for="idm-selected-bulk">' . esc_html__('選択中の応募者の確率をまとめて変更', 'idm-membership') . '</label>';
+        echo '<input type="number" id="idm-selected-bulk" min="1" max="1000" class="small-text" /> %';
+        echo '<button type="button" class="button" id="idm-apply-selected-bulk">' . esc_html__('一括適用', 'idm-membership') . '</button>';
+        echo '</div>';
+        echo '</div>';
+
+        echo '<div class="idm-manual-section">';
+        echo '<h3>' . esc_html__('その他の条件', 'idm-membership') . '</h3>';
+        echo '<p class="description">' . esc_html__('応募者に紐付かない条件を追加したい場合は、対象と識別値を指定して確率を登録できます。', 'idm-membership') . '</p>';
+
+        echo '<table class="widefat fixed striped idm-manual-table">';
+        echo '<thead><tr>';
+        echo '<th>' . esc_html__('対象', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('識別値', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('確率(%)', 'idm-membership') . '</th>';
+        echo '<th class="idm-column-actions"></th>';
+        echo '</tr></thead>';
+        echo '<tbody id="idm-manual-rows">';
+
+        $manual_index = 0;
+        foreach ($manual_weights as $weight) {
+            $field  = isset($weight['field']) ? $weight['field'] : 'email';
+            $value  = isset($weight['value']) ? $weight['value'] : '';
+            $chance = isset($weight['weight']) ? (int) $weight['weight'] : self::DEFAULT_WEIGHT;
+            self::render_manual_weight_row($manual_index, $field, $value, $chance);
+            $manual_index++;
+        }
+
+        self::render_manual_weight_row('__INDEX__', 'email', '', self::DEFAULT_WEIGHT, true);
+
+        echo '</tbody>';
+        echo '</table>';
+
+        echo '<p><button type="button" class="button" id="idm-add-manual">' . esc_html__('＋ 条件を追加', 'idm-membership') . '</button></p>';
+        echo '</div>';
+
+        submit_button(__('設定を保存', 'idm-membership'));
+
+        echo '<template id="idm-selected-entry-template">';
+        self::render_selected_entry_row('__INDEX__', [
+            'entry'  => ['member_id' => '', 'name' => '', 'email' => ''],
+            'weight' => self::DEFAULT_WEIGHT,
+            'key'    => '',
+        ], true);
+        echo '</template>';
+
+        echo '</form>';
+    }
+
+    private static function render_selected_entry_row($index, array $data, $is_template = false) {
+        $entry     = isset($data['entry']) && is_array($data['entry']) ? $data['entry'] : [];
+        $member_id = isset($entry['member_id']) ? (int) $entry['member_id'] : 0;
+        $name_raw  = isset($entry['name']) ? (string) $entry['name'] : '';
+        $email_raw = isset($entry['email']) ? (string) $entry['email'] : '';
+        $name      = $name_raw !== '' ? $name_raw : __('(未設定)', 'idm-membership');
+        $email     = $email_raw !== '' ? $email_raw : __('(メール不明)', 'idm-membership');
+        $weight    = isset($data['weight']) ? max(1, (int) $data['weight']) : self::DEFAULT_WEIGHT;
+        $key       = isset($data['key']) ? (string) $data['key'] : self::get_entry_key($entry);
+
+        $name_prefix = is_numeric($index)
+            ? 'selected[' . (int) $index . ']'
+            : 'selected[__INDEX__]';
+
+        $attributes = ['class="idm-selected-row"'];
+        if ($is_template) {
+            $attributes[] = 'data-template="1"';
+        }
+        $attributes[] = 'data-entry-key="' . esc_attr($key) . '"';
+        $attributes[] = 'data-member-id="' . esc_attr((string) $member_id) . '"';
+        $attributes[] = 'data-email="' . esc_attr($email_raw) . '"';
+        $attributes[] = 'data-name="' . esc_attr($name_raw) . '"';
+
+        echo '<tr ' . implode(' ', $attributes) . '>';
+        echo '<td class="idm-selected-name">' . esc_html($name) . '</td>';
+        echo '<td class="idm-selected-email">' . esc_html($email) . '</td>';
+        echo '<td class="idm-selected-weight">';
+        echo '<input type="hidden" data-field="member_id" name="' . esc_attr($name_prefix . '[member_id]') . '" value="' . esc_attr($member_id > 0 ? (string) $member_id : '') . '" />';
+        echo '<input type="hidden" data-field="email" name="' . esc_attr($name_prefix . '[email]') . '" value="' . esc_attr($email_raw) . '" />';
+        echo '<input type="hidden" data-field="name" name="' . esc_attr($name_prefix . '[name]') . '" value="' . esc_attr($name_raw) . '" />';
+        echo '<input type="number" data-field="weight" name="' . esc_attr($name_prefix . '[weight]') . '" value="' . esc_attr($weight) . '" min="1" max="1000" class="small-text" /> %';
+        echo '</td>';
+        echo '<td class="idm-selected-actions"><button type="button" class="button-link-delete idm-remove-selected">' . esc_html__('除外', 'idm-membership') . '</button></td>';
+        echo '</tr>';
+    }
+
+    private static function render_manual_weight_row($index, $field, $value, $chance, $is_template = false) {
+        $tr_class = $is_template ? 'idm-manual-row is-template' : 'idm-manual-row';
+        $name_prefix = is_numeric($index) ? 'manual[' . $index . ']' : 'manual[__INDEX__]';
+        $disabled = $is_template ? ' disabled="disabled"' : '';
+
+        echo '<tr class="' . esc_attr($tr_class) . '"' . ($is_template ? ' data-template="1" style="display:none;"' : '') . '>';
+        echo '<td>';
+        echo '<select data-field="field" name="' . esc_attr($name_prefix . '[field]') . '"' . $disabled . '>';
+        printf('<option value="email" %s>%s</option>', selected($field, 'email', false), esc_html__('メールアドレス', 'idm-membership'));
+        printf('<option value="name" %s>%s</option>', selected($field, 'name', false), esc_html__('名前', 'idm-membership'));
+        echo '</select>';
+        echo '</td>';
+        echo '<td><input type="text" data-field="value" name="' . esc_attr($name_prefix . '[value]') . '" value="' . esc_attr($value) . '" class="regular-text"' . $disabled . ' /></td>';
+        echo '<td><input type="number" data-field="weight" name="' . esc_attr($name_prefix . '[weight]') . '" value="' . esc_attr($chance) . '" min="1" max="1000" class="small-text"' . $disabled . ' /> %</td>';
+        echo '<td class="idm-column-actions"><button type="button" class="button-link-delete idm-remove-weight"' . ($is_template ? ' disabled="disabled"' : '') . '>' . esc_html__('削除', 'idm-membership') . '</button></td>';
+        echo '</tr>';
+    }
+
+    private static function prepare_weight_selection(array $entries, array $weights) {
+        $selected = [];
+        $manual   = [];
+
+        if (empty($weights)) {
+            return [$selected, $manual];
+        }
+
+        $by_member = [];
+        $by_email  = [];
+        $by_name   = [];
+
+        foreach ($entries as $entry) {
+            if (!empty($entry['member_id'])) {
+                $by_member[(int) $entry['member_id']] = $entry;
+            }
+            if (!empty($entry['email'])) {
+                $by_email[strtolower((string) $entry['email'])] = $entry;
+            }
+            if (!empty($entry['name'])) {
+                $by_name[(string) $entry['name']][] = $entry;
+            }
+        }
+
+        foreach ($weights as $weight) {
+            $field  = isset($weight['field']) ? (string) $weight['field'] : 'email';
+            $value  = isset($weight['value']) ? (string) $weight['value'] : '';
+            $chance = isset($weight['weight']) ? (int) $weight['weight'] : self::DEFAULT_WEIGHT;
+
+            $matched_entry = null;
+
+            if ($field === 'member_id') {
+                $member_id = (int) $value;
+                if ($member_id > 0 && isset($by_member[$member_id])) {
+                    $matched_entry = $by_member[$member_id];
+                }
+            } elseif ($field === 'email') {
+                $email = strtolower($value);
+                if ($email !== '' && isset($by_email[$email])) {
+                    $matched_entry = $by_email[$email];
+                }
+            } elseif ($field === 'name') {
+                if ($value !== '' && isset($by_name[$value]) && count($by_name[$value]) === 1) {
+                    $matched_entry = $by_name[$value][0];
+                }
+            }
+
+            if ($matched_entry) {
+                $key = self::get_entry_key($matched_entry);
+                $selected[$key] = [
+                    'entry'  => $matched_entry,
+                    'weight' => max(1, $chance),
+                    'field'  => $field,
+                    'value'  => $value,
+                    'key'    => $key,
+                ];
+                continue;
+            }
+
+            $manual[] = [
+                'field'  => $field,
+                'value'  => $value,
+                'weight' => max(1, $chance),
+            ];
+        }
+
+        if (!empty($selected)) {
+            $ordered = [];
+            foreach ($entries as $entry) {
+                $key = self::get_entry_key($entry);
+                if (isset($selected[$key])) {
+                    $ordered[$key] = $selected[$key];
+                }
+            }
+            $selected = $ordered;
+        }
+
+        return [$selected, $manual];
+    }
+
+    private static function get_entry_key(array $entry) {
+        if (!empty($entry['member_id'])) {
+            return 'member:' . (int) $entry['member_id'];
+        }
+        if (!empty($entry['email'])) {
+            return 'email:' . strtolower((string) $entry['email']);
+        }
+        if (!empty($entry['id'])) {
+            return 'join:' . (int) $entry['id'];
+        }
+        if (!empty($entry['name'])) {
+            return 'name:' . (string) $entry['name'];
+        }
+
+        return 'entry:' . md5(wp_json_encode($entry));
+    }
 
     private static function render_entries_section(array $entries, array $selected_entries) {
         echo '<h2>' . esc_html__('応募者一覧', 'idm-membership') . '</h2>';
@@ -624,6 +933,12 @@ class Admin {
         $selected_weights = self::sanitize_selected_weights($selected_input);
         $manual_weights   = self::sanitize_manual_weights($manual_input);
         $sanitized        = array_merge($selected_weights, $manual_weights);
+        $selected_input = isset($_POST['selected']) ? wp_unslash($_POST['selected']) : [];
+        $manual_input   = isset($_POST['manual']) ? wp_unslash($_POST['manual']) : [];
+
+        $selected_weights = self::sanitize_selected_weights($selected_input);
+        $manual_weights   = self::sanitize_manual_weights($manual_input);
+        $sanitized        = array_merge($selected_weights, $manual_weights);
 
         $options = self::get_weight_options();
         if (empty($sanitized)) {
@@ -640,6 +955,62 @@ class Admin {
         ];
         return $submitted_campaign;
     }
+
+    private static function sanitize_selected_weights($weights) {
+        $clean = [];
+        if (!is_array($weights)) {
+            return $clean;
+        }
+
+        foreach ($weights as $weight) {
+            if (!is_array($weight)) {
+                continue;
+            }
+
+            $chance = isset($weight['weight']) ? intval($weight['weight']) : self::DEFAULT_WEIGHT;
+            if ($chance <= 0) {
+                continue;
+            }
+
+            $member_id = isset($weight['member_id']) ? intval($weight['member_id']) : 0;
+            $email     = isset($weight['email']) ? sanitize_email($weight['email']) : '';
+            $name      = isset($weight['name']) ? sanitize_text_field($weight['name']) : '';
+
+            if ($member_id > 0) {
+                $clean[] = [
+                    'field'  => 'member_id',
+                    'value'  => (string) $member_id,
+                    'weight' => $chance,
+                ];
+                continue;
+            }
+
+            if ($email !== '') {
+                $clean[] = [
+                    'field'  => 'email',
+                    'value'  => $email,
+                    'weight' => $chance,
+                ];
+                continue;
+            }
+
+            if ($name !== '') {
+                $clean[] = [
+                    'field'  => 'name',
+                    'value'  => $name,
+                    'weight' => $chance,
+                ];
+            }
+        }
+
+        return $clean;
+    }
+
+    private static function sanitize_manual_weights($weights) {
+        $clean = [];
+        if (!is_array($weights)) {
+            return $clean;
+        }
 
     private static function sanitize_selected_weights($weights) {
         $clean = [];
@@ -732,7 +1103,9 @@ class Admin {
         return $campaigns;
     }
 
-    private static function get_selected_campaign(?array $available = null) {
+    private static function get_selected_campaign($available = null) {
+        $available = is_array($available) ? $available : [];
+
         $campaign = isset($_GET['campaign']) ? sanitize_key(wp_unslash($_GET['campaign'])) : '';
         if ($campaign !== '') {
             if (empty($available) || in_array($campaign, $available, true)) {
@@ -740,7 +1113,7 @@ class Admin {
             }
         }
 
-        if (is_array($available) && !empty($available)) {
+        if (!empty($available)) {
             return (string) reset($available);
         }
 
@@ -791,6 +1164,35 @@ class Admin {
             return $entries;
         }
 
+        foreach ($entries as &$entry) {
+            $entry['weight'] = self::DEFAULT_WEIGHT;
+            $entry['weight_rule'] = null;
+            foreach ($weights as $rule) {
+                $field = $rule['field'] ?? 'email';
+                $value = $rule['value'] ?? '';
+                $chance = isset($rule['weight']) ? (int) $rule['weight'] : self::DEFAULT_WEIGHT;
+
+                if ($field === 'member_id') {
+                    if ((int) $entry['member_id'] === (int) $value && (int) $entry['member_id'] !== 0) {
+                        $entry['weight'] = max(1, $chance);
+                        $entry['weight_rule'] = $rule;
+                        break;
+                    }
+                } elseif ($field === 'email') {
+                    if (strcasecmp((string) $entry['email'], (string) $value) === 0) {
+                        $entry['weight'] = max(1, $chance);
+                        $entry['weight_rule'] = $rule;
+                        break;
+                    }
+                } elseif ($field === 'name') {
+                    if ((string) $entry['name'] === (string) $value) {
+                        $entry['weight'] = max(1, $chance);
+                        $entry['weight_rule'] = $rule;
+                        break;
+                    }
+                }
+            }
+        }
         foreach ($entries as &$entry) {
             $entry['weight'] = self::DEFAULT_WEIGHT;
             $entry['weight_rule'] = null;
