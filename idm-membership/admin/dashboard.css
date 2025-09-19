@@ -35,6 +35,7 @@
   margin: 0;
 }
 
+
 .idm-dashboard .idm-entrant.is-selected .idm-entrant-weight-value {
   font-weight: 600;
   color: #2271b1;
@@ -82,6 +83,186 @@
 .idm-dashboard #idm-selected-bulk {
   width: 6em;
 }
+
+.idm-dashboard #idm-draw-button {
+  margin-top: 16px;
+  min-width: 160px;
+.idm-dashboard .idm-entrant-list tr.is-final {
+  background-color: #fde68a;
+}
+
+.idm-dashboard .idm-weights-form {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.idm-dashboard .idm-entrant-column-select,
+.idm-dashboard .idm-entrant-select {
+  width: 56px;
+  text-align: center;
+}
+
+.idm-dashboard .idm-entrant-select input {
+  margin: 0;
+}
+
+.idm-dashboard .idm-entrant.is-selected .idm-entrant-weight-value {
+  font-weight: 600;
+  color: #2271b1;
+}
+
+.idm-dashboard .idm-selected-section,
+.idm-dashboard .idm-manual-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.idm-dashboard .idm-selected-section table,
+.idm-dashboard .idm-manual-section table {
+  margin-top: 4px;
+}
+
+.idm-dashboard .idm-selected-empty {
+  margin: 0;
+  color: #646970;
+}
+
+.idm-dashboard .idm-selected-table .idm-selected-weight input[type="number"],
+.idm-dashboard .idm-manual-table input[type="number"] {
+  width: 6em;
+}
+
+.idm-dashboard .idm-selected-actions,
+.idm-dashboard .idm-manual-table .idm-column-actions {
+  width: 100px;
+  text-align: center;
+}
+
+.idm-dashboard .idm-weights-form .button-link-delete {
+  color: #d63638;
+}
+
+.idm-dashboard .idm-selected-bulk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.idm-dashboard #idm-selected-bulk {
+  width: 6em;
+}
+
+.idm-dashboard #idm-draw-button {
+  margin-top: 16px;
+  min-width: 160px;
+.idm-dashboard .idm-entrant-list tr.is-final {
+  background-color: #fde68a;
+}
+
+.idm-dashboard .idm-weights-form {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.idm-dashboard .idm-entrant-column-select,
+.idm-dashboard .idm-entrant-select {
+  width: 56px;
+  text-align: center;
+}
+
+.idm-dashboard .idm-entrant-select input {
+  margin: 0;
+}
+
+.idm-dashboard .idm-entrant.is-selected .idm-entrant-weight-value {
+  font-weight: 600;
+  color: #2271b1;
+}
+
+.idm-dashboard .idm-selected-section,
+.idm-dashboard .idm-manual-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.idm-dashboard .idm-selected-section table,
+.idm-dashboard .idm-manual-section table {
+  margin-top: 4px;
+}
+
+.idm-dashboard .idm-selected-empty {
+  margin: 0;
+  color: #646970;
+}
+
+.idm-dashboard .idm-selected-table .idm-selected-weight input[type="number"],
+.idm-dashboard .idm-manual-table input[type="number"] {
+  width: 6em;
+}
+
+.idm-dashboard .idm-selected-actions,
+.idm-dashboard .idm-manual-table .idm-column-actions {
+.idm-dashboard .idm-entrant-list tr.is-final {
+  background-color: #fde68a;
+}
+
+.idm-dashboard .idm-weights-form {
+  margin-top: 24px;
+}
+
+.idm-dashboard .idm-weights-form .idm-column-select {
+  width: 90px;
+  text-align: center;
+}
+
+.idm-dashboard .idm-weights-form .idm-column-select label {
+  margin-left: 4px;
+}
+
+.idm-dashboard .idm-weights-form table input[type="number"] {
+  width: 6em;
+}
+
+.idm-dashboard .idm-weights-form td.idm-column-select {
+  text-align: center;
+}
+
+.idm-dashboard .idm-weights-form .idm-column-actions {
+  width: 100px;
+  text-align: center;
+}
+
+.idm-dashboard .idm-weights-form .button-link-delete {
+  color: #d63638;
+}
+
+.idm-dashboard .idm-selected-bulk {
+.idm-dashboard .idm-weights-form .idm-bulk-note {
+  margin: 12px 0 0;
+}
+
+.idm-dashboard .idm-weights-form .idm-bulk-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.idm-dashboard #idm-selected-bulk {
+  width: 6em;
+}
+
+.idm-dashboard #idm-draw-button {
+  margin-top: 16px;
+  min-width: 160px;
 
 .idm-dashboard #idm-draw-button {
   margin-top: 16px;
