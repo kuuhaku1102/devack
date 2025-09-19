@@ -583,6 +583,10 @@ class Admin {
             if (!empty($wpdb->last_error)) {
                 error_log('[IDM] Failed to record campaign winner: ' . $wpdb->last_error);
             }
+
+        $result = $wpdb->insert($table, $data, $formats);
+
+        if ($result === false) {
             return false;
         }
 
