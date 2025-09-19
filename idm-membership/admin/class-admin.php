@@ -161,6 +161,7 @@ class Admin {
         echo '</form>';
     }
 
+
     private static function render_entries_section(array $entries, array $selected_entries) {
         echo '<h2>' . esc_html__('応募者一覧', 'idm-membership') . '</h2>';
         if (empty($entries)) {
@@ -274,6 +275,58 @@ class Admin {
 
         echo '<table class="widefat fixed striped idm-manual-table">';
         echo '<thead><tr>';
+    private static function render_entries_section(array $entries) {
+        echo '<h2>' . esc_html__('応募者一覧', 'idm-membership') . '</h2>';
+        if (empty($entries)) {
+            echo '<p class="idm-empty">' . esc_html__('応募者がまだいません。', 'idm-membership') . '</p>';
+            return;
+        }
+
+        echo '<p>' . sprintf(
+            /* translators: %d: number of entries */
+            esc_html__('応募人数: %d名', 'idm-membership'),
+            count($entries)
+        ) . '</p>';
+
+        echo '<table class="widefat fixed striped">';
+        echo '<thead><tr>';
+        echo '<th>' . esc_html__('名前', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('メールアドレス', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('応募日時', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('抽選確率(%)', 'idm-membership') . '</th>';
+        echo '</tr></thead>';
+        echo '<tbody class="idm-entrant-list">';
+        foreach ($entries as $entry) {
+            $name  = $entry['name'] !== '' ? $entry['name'] : __('(未設定)', 'idm-membership');
+            $email = $entry['email'] !== '' ? $entry['email'] : __('(メール不明)', 'idm-membership');
+            printf(
+                '<tr class="idm-entrant" data-member-id="%1$d" data-weight="%4$d"><td>%2$s</td><td>%3$s</td><td>%5$s</td><td>%4$d</td></tr>',
+                (int) $entry['member_id'],
+                esc_html($name),
+                esc_html($email),
+                (int) $entry['weight'],
+                esc_html($entry['joined_at'])
+            );
+        }
+        echo '</tbody>';
+        echo '</table>';
+    }
+
+    private static function render_weights_form($campaign, array $weights) {
+        echo '<h2>' . esc_html__('抽選確率の調整', 'idm-membership') . '</h2>';
+        echo '<p class="description">' . esc_html__('特定の会員を名前またはメールアドレスで指定し、抽選確率を％で上書きできます。未指定の応募者は100%（等確率）です。', 'idm-membership') . '</p>';
+
+        echo '<form method="post" class="idm-weights-form">';
+        wp_nonce_field('idm_save_weights');
+        echo '<input type="hidden" name="idm_action" value="save_weights" />';
+        echo '<input type="hidden" name="campaign" value="' . esc_attr($campaign) . '" />';
+
+        echo '<table class="widefat fixed striped">';
+        echo '<thead><tr>';
+        echo '<th class="idm-column-select">';
+        echo '<input type="checkbox" id="idm-weight-select-all" />';
+        echo '<label for="idm-weight-select-all">' . esc_html__('選択', 'idm-membership') . '</label>';
+        echo '</th>';
         echo '<th>' . esc_html__('対象', 'idm-membership') . '</th>';
         echo '<th>' . esc_html__('識別値', 'idm-membership') . '</th>';
         echo '<th>' . esc_html__('確率(%)', 'idm-membership') . '</th>';
@@ -460,6 +513,65 @@ class Admin {
         }
 
         return 'entry:' . md5(wp_json_encode($entry));
+    }
+        echo '</tr></thead>';
+        echo '<tbody id="idm-weight-rows">';
+
+        if (empty($weights)) {
+            $weights = [];
+        }
+
+        $index = 0;
+        foreach ($weights as $weight) {
+            $field  = isset($weight['field']) ? $weight['field'] : 'email';
+            $value  = isset($weight['value']) ? $weight['value'] : '';
+            $chance = isset($weight['weight']) ? (int)$weight['weight'] : self::DEFAULT_WEIGHT;
+            self::render_weight_row($index, $field, $value, $chance);
+            $index++;
+        }
+
+        // Empty template row (will be cloned by JS when adding new rule).
+        self::render_weight_row('__INDEX__', 'email', '', self::DEFAULT_WEIGHT, true);
+
+        echo '</tbody>';
+        echo '</table>';
+
+        echo '<p class="description idm-bulk-note">' . esc_html__('％を変更すると自動的にチェックが入ります。', 'idm-membership') . '</p>';
+        echo '<div class="idm-bulk-actions">';
+        echo '<label for="idm-bulk-weight">' . esc_html__('選択した行の確率をまとめて変更', 'idm-membership') . '</label>';
+        echo '<input type="number" id="idm-bulk-weight" min="1" max="1000" class="small-text" /> %';
+        echo '<button type="button" class="button" id="idm-apply-bulk">' . esc_html__('一括適用', 'idm-membership') . '</button>';
+        echo '</div>';
+
+        echo '<p><button type="button" class="button" id="idm-add-weight">' . esc_html__('＋ 条件を追加', 'idm-membership') . '</button></p>';
+        submit_button(__('設定を保存', 'idm-membership'));
+        echo '</form>';
+    }
+
+    private static function render_weight_row($index, $field, $value, $chance, $is_template = false) {
+        $tr_class = $is_template ? 'idm-weight-row is-template' : 'idm-weight-row';
+        $name_prefix = is_numeric($index) ? 'weights[' . $index . ']' : 'weights[__INDEX__]';
+        $disabled = $is_template ? ' disabled="disabled"' : '';
+
+        $checkbox_id = is_numeric($index)
+            ? 'idm-weight-select-' . (int) $index
+            : 'idm-weight-select-template';
+
+        echo '<tr class="' . esc_attr($tr_class) . '"' . ($is_template ? ' data-template="1" style="display:none;"' : '') . '>';
+        echo '<td class="idm-column-select">';
+        echo '<input type="checkbox" class="idm-weight-select" id="' . esc_attr($checkbox_id) . '" name="' . esc_attr($name_prefix . '[selected]') . '" value="1"' . $disabled . ' />';
+        echo '<label for="' . esc_attr($checkbox_id) . '" class="screen-reader-text">' . esc_html__('選択', 'idm-membership') . '</label>';
+        echo '</td>';
+        echo '<td>';
+        echo '<select name="' . esc_attr($name_prefix . '[field]') . '"' . $disabled . '>';
+        printf('<option value="email" %s>%s</option>', selected($field, 'email', false), esc_html__('メールアドレス', 'idm-membership'));
+        printf('<option value="name" %s>%s</option>', selected($field, 'name', false), esc_html__('名前', 'idm-membership'));
+        echo '</select>';
+        echo '</td>';
+        echo '<td><input type="text" name="' . esc_attr($name_prefix . '[value]') . '" value="' . esc_attr($value) . '" class="regular-text"' . $disabled . ' /></td>';
+        echo '<td><input type="number" name="' . esc_attr($name_prefix . '[weight]') . '" value="' . esc_attr($chance) . '" min="1" max="1000" class="small-text"' . $disabled . ' /> %</td>';
+        echo '<td class="idm-column-actions"><button type="button" class="button-link-delete idm-remove-weight"' . ($is_template ? ' disabled="disabled"' : '') . '>' . esc_html__('削除', 'idm-membership') . '</button></td>';
+        echo '</tr>';
     }
 
     private static function render_draw_section(array $entries) {
