@@ -22,8 +22,21 @@
   margin-top: 24px;
 }
 
+.idm-dashboard .idm-weights-form .idm-column-select {
+  width: 90px;
+  text-align: center;
+}
+
+.idm-dashboard .idm-weights-form .idm-column-select label {
+  margin-left: 4px;
+}
+
 .idm-dashboard .idm-weights-form table input[type="number"] {
   width: 6em;
+}
+
+.idm-dashboard .idm-weights-form td.idm-column-select {
+  text-align: center;
 }
 
 .idm-dashboard .idm-weights-form .idm-column-actions {
@@ -33,6 +46,18 @@
 
 .idm-dashboard .idm-weights-form .button-link-delete {
   color: #d63638;
+}
+
+.idm-dashboard .idm-weights-form .idm-bulk-note {
+  margin: 12px 0 0;
+}
+
+.idm-dashboard .idm-weights-form .idm-bulk-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .idm-dashboard #idm-draw-button {

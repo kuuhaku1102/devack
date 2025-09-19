@@ -7,6 +7,8 @@
     return Array.prototype.slice.call((context || document).querySelectorAll(selector));
   }
 
+  var selectAll = null;
+
   function addWeightRow() {
     var template = document.querySelector('.idm-weight-row[data-template="1"]');
     var tbody = document.getElementById('idm-weight-rows');
@@ -28,7 +30,7 @@
       if (name) {
         el.setAttribute('name', name.replace('__INDEX__', index));
       }
-      if (el.tagName === 'INPUT') {
+      if (el.tagName === 'INPUT' && el.type !== 'number' && el.type !== 'checkbox') {
         el.value = '';
       }
     });
@@ -36,6 +38,11 @@
     var select = $('select', clone);
     if (select) {
       select.value = 'email';
+    }
+
+    var checkbox = $('input[type="checkbox"]', clone);
+    if (checkbox) {
+      checkbox.checked = false;
     }
 
     var number = $('input[type="number"]', clone);
@@ -46,11 +53,39 @@
     }
 
     tbody.appendChild(clone);
+    updateSelectAllState();
+  }
+
+  function updateSelectAllState() {
+    if (!selectAll) {
+      return;
+    }
+    var checkboxes = $all('.idm-weight-row:not([data-template]) .idm-weight-select');
+    if (!checkboxes.length) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+      return;
+    }
+    var checkedCount = checkboxes.filter(function(box) { return box.checked; }).length;
+    selectAll.checked = checkedCount === checkboxes.length;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
   }
 
   var addButton = document.getElementById('idm-add-weight');
   if (addButton) {
     addButton.addEventListener('click', addWeightRow);
+  }
+
+  selectAll = document.getElementById('idm-weight-select-all');
+  if (selectAll) {
+    selectAll.addEventListener('change', function() {
+      var checked = selectAll.checked;
+      $all('.idm-weight-row:not([data-template]) .idm-weight-select').forEach(function(box) {
+        box.checked = checked;
+      });
+      updateSelectAllState();
+    });
+    updateSelectAllState();
   }
 
   document.addEventListener('click', function(event) {
@@ -59,9 +94,78 @@
       if (row && !row.hasAttribute('data-template')) {
         event.preventDefault();
         row.parentNode.removeChild(row);
+        updateSelectAllState();
       }
     }
   });
+
+  document.addEventListener('change', function(event) {
+    if (event.target && event.target.classList.contains('idm-weight-select')) {
+      updateSelectAllState();
+    }
+  });
+
+  document.addEventListener('input', function(event) {
+    if (event.target && event.target.matches('.idm-weight-row input[type="number"][name$="[weight]"]')) {
+      var row = event.target.closest('.idm-weight-row');
+      if (!row || row.hasAttribute('data-template')) {
+        return;
+      }
+      var checkbox = row.querySelector('.idm-weight-select');
+      if (checkbox && !checkbox.checked) {
+        checkbox.checked = true;
+        updateSelectAllState();
+      }
+    }
+  });
+
+  var bulkInput = document.getElementById('idm-bulk-weight');
+  var bulkButton = document.getElementById('idm-apply-bulk');
+
+  if (bulkButton && bulkInput) {
+    bulkButton.addEventListener('click', function() {
+      var rawValue = bulkInput.value;
+      if (rawValue === '') {
+        bulkInput.focus();
+        return;
+      }
+
+      var number = parseInt(rawValue, 10);
+      if (isNaN(number)) {
+        bulkInput.focus();
+        return;
+      }
+
+      var min = parseInt(bulkInput.getAttribute('min'), 10);
+      var max = parseInt(bulkInput.getAttribute('max'), 10);
+      if (!isNaN(min) && number < min) {
+        number = min;
+      }
+      if (!isNaN(max) && number > max) {
+        number = max;
+      }
+
+      bulkInput.value = number;
+
+      var selected = $all('.idm-weight-row:not([data-template]) .idm-weight-select:checked');
+      if (!selected.length) {
+        return;
+      }
+
+      selected.forEach(function(box) {
+        var row = box.closest('.idm-weight-row');
+        if (!row) {
+          return;
+        }
+        var input = row.querySelector('input[type="number"][name$="[weight]"]');
+        if (!input) {
+          return;
+        }
+        input.value = number;
+        input.setAttribute('value', number);
+      });
+    });
+  }
 
   var drawButton = document.getElementById('idm-draw-button');
   var resultBox = document.getElementById('idm-draw-result');
