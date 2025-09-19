@@ -572,6 +572,18 @@ class Admin {
 
         $formats = ['%s', '%d', '%d', '%s', '%s', '%d', '%s'];
 
+        if (!self::table_has_column($table, 'drawn_at')) {
+            unset($data['drawn_at']);
+            array_pop($formats);
+        }
+
+        $result = $wpdb->insert($table, $data, $formats);
+
+        if ($result === false) {
+            if (!empty($wpdb->last_error)) {
+                error_log('[IDM] Failed to record campaign winner: ' . $wpdb->last_error);
+            }
+
         $result = $wpdb->insert($table, $data, $formats);
 
         if ($result === false) {
@@ -588,6 +600,19 @@ class Admin {
         $found = $wpdb->get_var($prepared);
 
         return $found === $table;
+    }
+
+    private static function table_has_column($table, $column) {
+        global $wpdb;
+
+        if (!function_exists('esc_sql')) {
+            return false;
+        }
+
+        $table = esc_sql($table);
+        $sql = $wpdb->prepare("SHOW COLUMNS FROM `{$table}` LIKE %s", $column);
+
+        return (bool) $wpdb->get_var($sql);
     }
 }
 

@@ -123,6 +123,7 @@ class Install {
         self::ensure_column($winners, 'winner_name', "VARCHAR(255) NOT NULL DEFAULT ''");
         self::ensure_column($winners, 'winner_email', "VARCHAR(190) NOT NULL DEFAULT ''");
         self::ensure_column($winners, 'winner_weight', "INT(11) NOT NULL DEFAULT 0");
+        self::ensure_column($winners, 'drawn_at', "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'");
         self::ensure_column($winners, 'drawn_at', "DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP");
     }
 
@@ -138,6 +139,7 @@ class Install {
             winner_name VARCHAR(255) NOT NULL DEFAULT '',
             winner_email VARCHAR(190) NOT NULL DEFAULT '',
             winner_weight INT(11) NOT NULL DEFAULT 0,
+            drawn_at DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00',
             drawn_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY  (id),
             KEY campaign_key (campaign_key),
