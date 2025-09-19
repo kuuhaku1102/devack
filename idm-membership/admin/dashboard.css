@@ -1,0 +1,62 @@
+.idm-dashboard .idm-campaign-selector {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.idm-dashboard .idm-campaign-selector select {
+  min-width: 200px;
+}
+
+.idm-dashboard .idm-entrant-list tr.is-active {
+  background-color: #fef3c7;
+  transition: background-color 0.2s ease;
+}
+
+.idm-dashboard .idm-entrant-list tr.is-final {
+  background-color: #fde68a;
+}
+
+.idm-dashboard .idm-weights-form {
+  margin-top: 24px;
+}
+
+.idm-dashboard .idm-weights-form table input[type="number"] {
+  width: 6em;
+}
+
+.idm-dashboard .idm-weights-form .idm-column-actions {
+  width: 100px;
+  text-align: center;
+}
+
+.idm-dashboard .idm-weights-form .button-link-delete {
+  color: #d63638;
+}
+
+.idm-dashboard #idm-draw-button {
+  margin-top: 16px;
+  min-width: 160px;
+}
+
+.idm-dashboard .idm-draw-result {
+  margin-top: 16px;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.idm-dashboard .idm-draw-result .winner {
+  color: #0073aa;
+}
+
+.idm-dashboard .idm-draw-result .error {
+  color: #d63638;
+  font-weight: 500;
+}
+
+.idm-dashboard .idm-empty {
+  padding: 12px 16px;
+  background: #f8f8f8;
+  border-radius: 4px;
+}
