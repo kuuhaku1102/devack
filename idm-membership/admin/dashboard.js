@@ -24,21 +24,36 @@
 
     var index = tbody.querySelectorAll('.idm-weight-row:not([data-template])').length;
     $all('[name]', clone).forEach(function(el) {
-      var name = el.getAttribute('name');
-      if (name) {
-        el.setAttribute('name', name.replace('__INDEX__', index));
+      var nameAttr = el.getAttribute('name');
+      if (nameAttr) {
+        el.setAttribute('name', nameAttr.replace('__INDEX__', index));
       }
-      if (el.tagName === 'INPUT') {
+      if (el.tagName === 'INPUT' && el.type !== 'hidden') {
         el.value = '';
       }
     });
 
-    var select = $('select', clone);
-    if (select) {
-      select.value = initialData && initialData.field ? initialData.field : 'email';
+    var fieldValue = initialData && initialData.field ? initialData.field : 'name';
+    var label = $('.idm-weight-field-label', clone);
+    if (label) {
+      var labelForName = label.getAttribute('data-label-name');
+      var labelForEmail = label.getAttribute('data-label-email');
+      var text = fieldValue === 'email' && labelForEmail ? labelForEmail : (labelForName || label.textContent);
+      label.textContent = text;
+      if (fieldValue === 'email') {
+        label.classList.add('is-legacy');
+      } else {
+        label.classList.remove('is-legacy');
+      }
     }
 
-    var textInput = $('input[type="text"]', clone);
+    var fieldInput = $('.idm-weight-field-input', clone);
+    if (fieldInput) {
+      fieldInput.value = fieldValue;
+      fieldInput.setAttribute('value', fieldValue);
+    }
+
+    var textInput = $('.idm-weight-value-input', clone);
     if (textInput) {
       var textValue = initialData && initialData.value ? initialData.value : '';
       textInput.value = textValue;
@@ -83,7 +98,7 @@
     selectedNone: '選択された応募者がありません。',
     weightInvalid: '抽選確率は1以上の数値を入力してください。',
     applySuccess: '抽選確率を適用しました。設定を保存してください。',
-    applyPartial: '抽選確率を適用しましたが、メールアドレスまたは名前が未設定の応募者は対象外です。',
+    applyPartial: '抽選確率を適用しましたが、名前が未設定の応募者は対象外です。',
     applyFailed: '抽選確率を適用できませんでした。対象となる応募者を選択してください。'
   };
 
@@ -149,11 +164,7 @@
 
     entries.forEach(function(entry) {
       var li = document.createElement('li');
-      var label = entry.displayName;
-      if (entry.displayEmail) {
-        label += ' (' + entry.displayEmail + ')';
-      }
-      li.textContent = label;
+      li.textContent = entry.displayName || '';
       selectedList.appendChild(li);
     });
   }
@@ -168,7 +179,7 @@
     }, 1500);
   }
 
-  function ensureWeightRow(field, value, weight) {
+  function ensureWeightRow(value, weight) {
     var tbody = document.getElementById('idm-weight-rows');
     if (!tbody) {
       return null;
@@ -180,12 +191,12 @@
 
     var targetRow = null;
     rows.some(function(row) {
-      var select = $('select', row);
-      var textInput = $('input[type="text"]', row);
-      if (!select || !textInput) {
+      var fieldInput = $('.idm-weight-field-input', row);
+      var textInput = $('.idm-weight-value-input', row);
+      if (!fieldInput || !textInput) {
         return false;
       }
-      if (select.value === field && textInput.value === value) {
+      if (fieldInput.value === 'name' && textInput.value === value) {
         targetRow = row;
         return true;
       }
@@ -193,19 +204,27 @@
     });
 
     if (!targetRow) {
-      targetRow = addWeightRow({ field: field, value: value, weight: weight });
+      targetRow = addWeightRow({ field: 'name', value: value, weight: weight });
     }
 
     if (!targetRow) {
       return null;
     }
 
-    var selectEl = $('select', targetRow);
-    if (selectEl) {
-      selectEl.value = field;
+    var label = $('.idm-weight-field-label', targetRow);
+    if (label) {
+      var labelForName = label.getAttribute('data-label-name');
+      label.textContent = labelForName || label.textContent;
+      label.classList.remove('is-legacy');
     }
 
-    var textEl = $('input[type="text"]', targetRow);
+    var fieldInput = $('.idm-weight-field-input', targetRow);
+    if (fieldInput) {
+      fieldInput.value = 'name';
+      fieldInput.setAttribute('value', 'name');
+    }
+
+    var textEl = $('.idm-weight-value-input', targetRow);
     if (textEl) {
       textEl.value = value;
       textEl.setAttribute('value', value);
@@ -236,22 +255,18 @@
 
       if (checkbox.checked) {
         var nameEl = $('.idm-entrant-name-text', row);
-        var emailEl = $('.idm-entrant-email', row);
         var displayName = nameEl ? nameEl.textContent.trim() : '';
         if (!displayName) {
           displayName = row.getAttribute('data-name') || '';
         }
-        var displayEmail = emailEl ? emailEl.textContent.trim() : '';
-        if (!displayEmail) {
-          displayEmail = row.getAttribute('data-email') || '';
-        }
+        var rawName = row.getAttribute('data-name') || '';
+        var entryId = row.getAttribute('data-entry-id') || '';
 
         addSelectedEntry(memberId, {
           memberId: memberId,
-          rawName: row.getAttribute('data-name') || '',
-          rawEmail: row.getAttribute('data-email') || '',
-          displayName: displayName,
-          displayEmail: displayEmail
+          entryId: entryId,
+          rawName: rawName,
+          displayName: displayName
         });
         row.classList.add('is-selected');
       } else {
@@ -286,13 +301,12 @@
       var skipped = 0;
 
       entries.forEach(function(entry) {
-        var field = entry.rawEmail ? 'email' : (entry.rawName ? 'name' : '');
-        var value = entry.rawEmail ? entry.rawEmail : entry.rawName;
-        if (!field || !value) {
+        var value = entry.rawName ? entry.rawName : '';
+        if (!value) {
           skipped++;
           return;
         }
-        if (ensureWeightRow(field, value, weightValue)) {
+        if (ensureWeightRow(value, weightValue)) {
           processed++;
         } else {
           skipped++;
@@ -448,9 +462,8 @@
       return;
     }
     var name = winner.name ? winner.name : '(未設定)';
-    var email = winner.email ? winner.email : '(メール不明)';
     var chance = winner.weight ? winner.weight : 100;
-    var html = '<span class="winner">' + escapeHtml(name) + '</span> (' + escapeHtml(email) + ') - ' + chance + '%';
+    var html = '<span class="winner">' + escapeHtml(name) + '</span> - ' + chance + '%';
     resultBox.innerHTML = html;
   }
 
