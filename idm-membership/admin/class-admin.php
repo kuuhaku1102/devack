@@ -30,15 +30,6 @@ class Admin {
             'dashicons-groups',
             58
         );
-
-        add_submenu_page(
-            $slug,
-            __('ダッシュボード', 'idm-membership'),
-            __('ダッシュボード', 'idm-membership'),
-            'manage_options',
-            $slug,
-            [__CLASS__, 'render_dashboard']
-        );
     }
 
     public static function enqueue_assets($hook) {
@@ -79,7 +70,7 @@ class Admin {
                     'selectedNone'  => __('選択された応募者がありません。', 'idm-membership'),
                     'weightInvalid' => __('抽選確率は1以上の数値を入力してください。', 'idm-membership'),
                     'applySuccess'  => __('抽選確率を適用しました。設定を保存してください。', 'idm-membership'),
-                    'applyPartial'  => __('抽選確率を適用しましたが、メールアドレスまたは名前が未設定の応募者は対象外です。', 'idm-membership'),
+                    'applyPartial'  => __('抽選確率を適用しましたが、名前が未設定の応募者は対象外です。', 'idm-membership'),
                     'applyFailed'   => __('抽選確率を適用できませんでした。対象となる応募者を選択してください。', 'idm-membership'),
                 ],
             ]
@@ -181,34 +172,29 @@ class Admin {
         echo '<table class="widefat fixed striped">';
         echo '<thead><tr>';
         echo '<th>' . esc_html__('名前', 'idm-membership') . '</th>';
-        echo '<th>' . esc_html__('メールアドレス', 'idm-membership') . '</th>';
         echo '<th>' . esc_html__('応募日時', 'idm-membership') . '</th>';
         echo '<th>' . esc_html__('抽選確率(%)', 'idm-membership') . '</th>';
         echo '</tr></thead>';
         echo '<tbody class="idm-entrant-list">';
         foreach ($entries as $entry) {
             $raw_name  = isset($entry['name']) ? (string) $entry['name'] : '';
-            $raw_email = isset($entry['email']) ? (string) $entry['email'] : '';
             $name      = $raw_name !== '' ? $raw_name : __('(未設定)', 'idm-membership');
-            $email     = $raw_email !== '' ? $raw_email : __('(メール不明)', 'idm-membership');
             $joined_at = isset($entry['joined_at']) ? (string) $entry['joined_at'] : '';
             $weight    = isset($entry['weight']) ? (int) $entry['weight'] : self::DEFAULT_WEIGHT;
 
             printf(
-                '<tr class="idm-entrant" data-member-id="%1$d" data-weight="%5$d" data-name="%6$s" data-email="%7$s">'
+                '<tr class="idm-entrant" data-member-id="%1$d" data-entry-id="%6$d" data-weight="%4$d" data-name="%5$s">'
                 . '<td class="idm-entrant-name"><label><input type="checkbox" class="idm-entrant-select" value="%1$d" /> '
                 . '<span class="idm-entrant-name-text">%2$s</span></label></td>'
-                . '<td class="idm-entrant-email">%3$s</td>'
-                . '<td>%4$s</td>'
-                . '<td class="idm-entrant-weight">%5$d</td>'
+                . '<td>%3$s</td>'
+                . '<td class="idm-entrant-weight">%4$d</td>'
                 . '</tr>',
                 (int) $entry['member_id'],
                 esc_html($name),
-                esc_html($email),
                 esc_html($joined_at),
                 (int) $weight,
                 esc_attr($raw_name),
-                esc_attr($raw_email)
+                (int) $entry['id']
             );
         }
         echo '</tbody>';
@@ -231,7 +217,7 @@ class Admin {
 
     private static function render_weights_form($campaign, array $weights) {
         echo '<h2>' . esc_html__('抽選確率の調整', 'idm-membership') . '</h2>';
-        echo '<p class="description">' . esc_html__('特定の会員を名前またはメールアドレスで指定し、抽選確率を％で上書きできます。未指定の応募者は100%（等確率）です。', 'idm-membership') . '</p>';
+        echo '<p class="description">' . esc_html__('特定の会員を名前で指定し、抽選確率を％で上書きできます。未指定の応募者は100%（等確率）です。', 'idm-membership') . '</p>';
 
         echo '<form method="post" class="idm-weights-form">';
         wp_nonce_field('idm_save_weights');
@@ -240,8 +226,7 @@ class Admin {
 
         echo '<table class="widefat fixed striped">';
         echo '<thead><tr>';
-        echo '<th>' . esc_html__('対象', 'idm-membership') . '</th>';
-        echo '<th>' . esc_html__('識別値', 'idm-membership') . '</th>';
+        echo '<th>' . esc_html__('名前', 'idm-membership') . '</th>';
         echo '<th>' . esc_html__('確率(%)', 'idm-membership') . '</th>';
         echo '<th class="idm-column-actions"></th>';
         echo '</tr></thead>';
@@ -253,7 +238,7 @@ class Admin {
 
         $index = 0;
         foreach ($weights as $weight) {
-            $field  = isset($weight['field']) ? $weight['field'] : 'email';
+            $field  = isset($weight['field']) ? $weight['field'] : 'name';
             $value  = isset($weight['value']) ? $weight['value'] : '';
             $chance = isset($weight['weight']) ? (int)$weight['weight'] : self::DEFAULT_WEIGHT;
             self::render_weight_row($index, $field, $value, $chance);
@@ -261,7 +246,7 @@ class Admin {
         }
 
         // Empty template row (will be cloned by JS when adding new rule).
-        self::render_weight_row('__INDEX__', 'email', '', self::DEFAULT_WEIGHT, true);
+        self::render_weight_row('__INDEX__', 'name', '', self::DEFAULT_WEIGHT, true);
 
         echo '</tbody>';
         echo '</table>';
@@ -275,16 +260,23 @@ class Admin {
         $tr_class = $is_template ? 'idm-weight-row is-template' : 'idm-weight-row';
         $name_prefix = is_numeric($index) ? 'weights[' . $index . ']' : 'weights[__INDEX__]';
         $disabled = $is_template ? ' disabled="disabled"' : '';
+        $field_value = in_array($field, ['email', 'name'], true) ? $field : 'name';
+        $label_name  = __('名前', 'idm-membership');
+        $label_email = __('メールアドレス（旧設定）', 'idm-membership');
+        $label = $field_value === 'email' ? $label_email : $label_name;
 
         echo '<tr class="' . esc_attr($tr_class) . '"' . ($is_template ? ' data-template="1" style="display:none;"' : '') . '>';
-        echo '<td>';
-        echo '<select name="' . esc_attr($name_prefix . '[field]') . '"' . $disabled . '>';
-        printf('<option value="email" %s>%s</option>', selected($field, 'email', false), esc_html__('メールアドレス', 'idm-membership'));
-        printf('<option value="name" %s>%s</option>', selected($field, 'name', false), esc_html__('名前', 'idm-membership'));
-        echo '</select>';
+        echo '<td class="idm-weight-identifier">';
+        echo '<span class="idm-weight-field-label' . ($field_value === 'email' ? ' is-legacy' : '') . '" data-label-name="' . esc_attr($label_name) . '" data-label-email="' . esc_attr($label_email) . '">' . esc_html($label) . '</span>';
+        echo '<input type="hidden" class="idm-weight-field-input" name="' . esc_attr($name_prefix . '[field]') . '" value="' . esc_attr($field_value) . '"' . $disabled . ' />';
+        echo '<input type="text" name="' . esc_attr($name_prefix . '[value]') . '" value="' . esc_attr($value) . '" class="regular-text idm-weight-value-input"' . $disabled . ' />';
+        if (!$is_template && $field_value === 'email') {
+            echo '<p class="description idm-weight-legacy-note">' . esc_html__('旧形式の設定です。必要に応じて名前で設定し直してください。', 'idm-membership') . '</p>';
+        }
         echo '</td>';
-        echo '<td><input type="text" name="' . esc_attr($name_prefix . '[value]') . '" value="' . esc_attr($value) . '" class="regular-text"' . $disabled . ' /></td>';
-        echo '<td><input type="number" name="' . esc_attr($name_prefix . '[weight]') . '" value="' . esc_attr($chance) . '" min="1" max="1000" class="small-text"' . $disabled . ' /> %</td>';
+        echo '<td>';
+        echo '<input type="number" name="' . esc_attr($name_prefix . '[weight]') . '" value="' . esc_attr($chance) . '" min="1" max="1000" class="small-text"' . $disabled . ' /> %';
+        echo '</td>';
         echo '<td class="idm-column-actions"><button type="button" class="button-link-delete idm-remove-weight"' . ($is_template ? ' disabled="disabled"' : '') . '>' . esc_html__('削除', 'idm-membership') . '</button></td>';
         echo '</tr>';
     }
@@ -359,9 +351,9 @@ class Admin {
         }
 
         foreach ($weights as $weight) {
-            $field = isset($weight['field']) ? sanitize_key($weight['field']) : 'email';
+            $field = isset($weight['field']) ? sanitize_key($weight['field']) : 'name';
             if (!in_array($field, ['email', 'name'], true)) {
-                $field = 'email';
+                $field = 'name';
             }
 
             $value = isset($weight['value']) ? sanitize_text_field($weight['value']) : '';
@@ -502,12 +494,18 @@ class Admin {
             wp_send_json_error(['message' => __('抽選に失敗しました。', 'idm-membership')]);
         }
 
+        $record_id = self::record_winner($campaign, $winner);
+        if ($record_id === false) {
+            wp_send_json_error(['message' => __('抽選結果を保存できませんでした。', 'idm-membership')]);
+        }
+
         wp_send_json_success([
             'winner' => [
                 'member_id' => $winner['member_id'],
-                'name'      => $winner['name'],
-                'email'     => $winner['email'],
-                'weight'    => $winner['weight'],
+                'entry_id'  => isset($winner['id']) ? (int) $winner['id'] : 0,
+                'name'      => isset($winner['name']) ? $winner['name'] : '',
+                'weight'    => isset($winner['weight']) ? (int) $winner['weight'] : self::DEFAULT_WEIGHT,
+                'record_id' => $record_id,
             ],
         ]);
     }
@@ -539,6 +537,57 @@ class Admin {
         }
 
         return end($entries);
+    }
+
+    private static function record_winner($campaign, array $winner) {
+        global $wpdb;
+
+        $table = $wpdb->prefix . 'idm_campaign_winners';
+
+        if (!self::table_exists($table)) {
+            if (!class_exists(__NAMESPACE__ . '\\Install')) {
+                $install_file = IDM_MEMBERSHIP_DIR . 'includes/class-install.php';
+                if (is_readable($install_file)) {
+                    require_once $install_file;
+                }
+            }
+
+            if (class_exists(__NAMESPACE__ . '\\Install')) {
+                Install::maybe_upgrade();
+            }
+            if (!self::table_exists($table)) {
+                return false;
+            }
+        }
+
+        $data = [
+            'campaign_key'     => $campaign,
+            'winner_member_id' => isset($winner['member_id']) ? (int) $winner['member_id'] : 0,
+            'entry_id'         => isset($winner['id']) ? (int) $winner['id'] : 0,
+            'winner_name'      => isset($winner['name']) ? (string) $winner['name'] : '',
+            'winner_email'     => isset($winner['email']) ? (string) $winner['email'] : '',
+            'winner_weight'    => isset($winner['weight']) ? (int) $winner['weight'] : self::DEFAULT_WEIGHT,
+            'drawn_at'         => current_time('mysql'),
+        ];
+
+        $formats = ['%s', '%d', '%d', '%s', '%s', '%d', '%s'];
+
+        $result = $wpdb->insert($table, $data, $formats);
+
+        if ($result === false) {
+            return false;
+        }
+
+        return (int) $wpdb->insert_id;
+    }
+
+    private static function table_exists($table) {
+        global $wpdb;
+
+        $prepared = $wpdb->prepare('SHOW TABLES LIKE %s', $table);
+        $found = $wpdb->get_var($prepared);
+
+        return $found === $table;
     }
 }
 
