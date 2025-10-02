@@ -407,6 +407,37 @@ class Admin {
     }
 
     private static function sanitize_campaign_key($value) {
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $value = sanitize_text_field((string) $value);
+        // Remove control characters that may slip through sanitize_text_field.
+        $value = preg_replace('/[\x00-\x1F\x7F]/u', '', $value);
+
+        return trim($value);
+    }
+
+    private static function get_selected_campaign(?array $available = null) {
+        $raw = isset($_GET['campaign']) ? wp_unslash($_GET['campaign']) : '';
+        $campaign = self::sanitize_campaign_key($raw);
+        if ($campaign !== '') {
+            if (empty($available) || in_array($campaign, $available, true)) {
+                return $campaign;
+            }
+        }
+
+        if (is_scalar($raw)) {
+            $raw = trim((string) $raw);
+            if ($raw !== '' && (empty($available) || in_array($raw, $available, true))) {
+                return $raw;
+            }
+        }
+
+        if (is_array($available) && !empty($available)) {
+            return (string) reset($available);
+        }
+
         $value = (string) $value;
         $value = preg_replace('/[^A-Za-z0-9_\-]/', '', $value);
         return $value;
