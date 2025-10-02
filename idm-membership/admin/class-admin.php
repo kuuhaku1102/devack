@@ -438,6 +438,23 @@ class Admin {
             return (string) reset($available);
         }
 
+        $value = (string) $value;
+        $value = preg_replace('/[^A-Za-z0-9_\-]/', '', $value);
+        return $value;
+    }
+
+    private static function get_selected_campaign(?array $available = null) {
+        $campaign = isset($_GET['campaign']) ? self::sanitize_campaign_key(wp_unslash($_GET['campaign'])) : '';
+        if ($campaign !== '') {
+            if (empty($available) || in_array($campaign, $available, true)) {
+                return $campaign;
+            }
+        }
+
+        if (is_array($available) && !empty($available)) {
+            return (string) reset($available);
+        }
+
         return '';
     }
 
