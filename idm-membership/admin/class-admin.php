@@ -322,7 +322,7 @@ class Admin {
 
         check_admin_referer('idm_save_weights');
 
-        $submitted_campaign = isset($_POST['campaign']) ? sanitize_key(wp_unslash($_POST['campaign'])) : '';
+        $submitted_campaign = isset($_POST['campaign']) ? self::sanitize_campaign_key(wp_unslash($_POST['campaign'])) : '';
         if ($submitted_campaign === '') {
             self::$messages[] = [
                 'type'    => 'notice notice-error',
@@ -406,11 +406,31 @@ class Admin {
         return $campaigns;
     }
 
+    private static function sanitize_campaign_key($value) {
+        if (!is_scalar($value)) {
+            return '';
+        }
+
+        $value = sanitize_text_field((string) $value);
+        // Remove control characters that may slip through sanitize_text_field.
+        $value = preg_replace('/[\x00-\x1F\x7F]/u', '', $value);
+
+        return trim($value);
+    }
+
     private static function get_selected_campaign(?array $available = null) {
-        $campaign = isset($_GET['campaign']) ? sanitize_key(wp_unslash($_GET['campaign'])) : '';
+        $raw = isset($_GET['campaign']) ? wp_unslash($_GET['campaign']) : '';
+        $campaign = self::sanitize_campaign_key($raw);
         if ($campaign !== '') {
             if (empty($available) || in_array($campaign, $available, true)) {
                 return $campaign;
+            }
+        }
+
+        if (is_scalar($raw)) {
+            $raw = trim((string) $raw);
+            if ($raw !== '' && (empty($available) || in_array($raw, $available, true))) {
+                return $raw;
             }
         }
 
@@ -499,7 +519,7 @@ class Admin {
 
         check_ajax_referer('idm_draw_campaign', 'nonce');
 
-        $campaign = isset($_POST['campaign']) ? sanitize_key(wp_unslash($_POST['campaign'])) : '';
+        $campaign = isset($_POST['campaign']) ? self::sanitize_campaign_key(wp_unslash($_POST['campaign'])) : '';
         if ($campaign === '') {
             wp_send_json_error(['message' => __('キャンペーンが指定されていません。', 'idm-membership')]);
         }
@@ -536,7 +556,7 @@ class Admin {
 
         check_ajax_referer('idm_draw_campaign', 'nonce');
 
-        $campaign = isset($_POST['campaign']) ? sanitize_key(wp_unslash($_POST['campaign'])) : '';
+        $campaign = isset($_POST['campaign']) ? self::sanitize_campaign_key(wp_unslash($_POST['campaign'])) : '';
         if ($campaign === '') {
             wp_send_json_error(['message' => __('キャンペーンが指定されていません。', 'idm-membership')]);
         }
