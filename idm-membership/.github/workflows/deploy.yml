@@ -1,0 +1,87 @@
+name: Deploy to Production WordPress
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Sync theme to production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        id: ssh-key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          if [ -z "${SSH_PRIVATE_KEY}" ]; then
+            echo "::error::SSH_PRIVATE_KEY secret is not configured." >&2
+            exit 1
+          fi
+          if [ -z "${SSH_HOST}" ]; then
+            echo "::error::SSH_HOST secret is not configured." >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          if [ -n "${SSH_KNOWN_HOSTS}" ]; then
+            echo "${SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          else
+            if [ -n "${SSH_PORT}" ]; then
+              ssh-keyscan -p "${SSH_PORT}" "${SSH_HOST}" >> ~/.ssh/known_hosts
+            else
+              ssh-keyscan "${SSH_HOST}" >> ~/.ssh/known_hosts
+            fi
+          fi
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy via rsync
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          REMOTE_PATH: ${{ secrets.SSH_REMOTE_PATH }}
+        run: |
+          if [ -z "${SSH_HOST}" ] || [ -z "${SSH_USER}" ] || [ -z "${REMOTE_PATH}" ]; then
+            echo "::error::SSH_HOST, SSH_USER, and SSH_REMOTE_PATH secrets must be set." >&2
+            exit 1
+          fi
+          PORT_OPTION=""
+          if [ -n "${SSH_PORT}" ]; then
+            PORT_OPTION="-p ${SSH_PORT}"
+          fi
+          rsync -az --delete \
+            --exclude ".git/" \
+            --exclude ".github/" \
+            --exclude "scripts/" \
+            --exclude "README.md" \
+            -e "ssh ${PORT_OPTION} -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes" \
+            ./ "${SSH_USER}@${SSH_HOST}:${REMOTE_PATH}"
+
+      - name: Flush WordPress cache (optional)
+        if: ${{ secrets.SSH_POST_DEPLOY_COMMAND != '' }}
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          POST_COMMAND: ${{ secrets.SSH_POST_DEPLOY_COMMAND }}
+        run: |
+          PORT_OPTION=""
+          if [ -n "${SSH_PORT}" ]; then
+            PORT_OPTION="-p ${SSH_PORT}"
+          fi
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ${PORT_OPTION} "${SSH_USER}@${SSH_HOST}" "${POST_COMMAND}"
